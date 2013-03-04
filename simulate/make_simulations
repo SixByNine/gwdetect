@@ -1,0 +1,47 @@
+#!/bin/bash
+amp=1e-14
+nthread=8
+nreal=100
+
+. ./settings
+
+gwseed=`toasim_seed.py GWB seed`
+rm $amp.gwb
+for i in *.par ; do
+   psr=`basename $i .par`
+   while [[ `jobs -r | wc -l` -ge $nthread ]] ; do
+	  n=`jobs -r | wc -l`
+	  echo "Wait ($n/$nthread) running"
+	  sleep 1
+   done
+
+   tempo2-mjk -gr formIdeal -f $psr.par $psr.simulate
+   mv $psr.simulate.sim $psr.ideal
+
+   tempo2-mjk -gr addGaussian -f $psr.par $psr.ideal -nreal $nreal
+   if [[ -e $amp.gwb ]]; then
+	  echo tempo2-mjk -gr addGWB -f $psr.par $psr.ideal -nofit -dist 1 -alpha -0.6666 -gwamp $amp -ngw 2000 -nreal $nreal -npsr 1 -readGW $amp.gwb -seed $gwseed
+	  tempo2-mjk -gr addGWB -f $psr.par $psr.ideal -nofit -dist 1 -alpha -0.6666 -gwamp $amp -ngw 2000 -nreal $nreal -npsr 1 -readGW $amp.gwb -seed $gwseed > /dev/null 2>&1 &
+   else
+	  echo tempo2-mjk -gr addGWB -f $psr.par $psr.ideal -nofit -dist 1 -alpha -0.6666 -gwamp $amp -ngw 2000 -nreal $nreal -npsr 1 -writeGW $amp.gwb -seed $gwseed
+	  tempo2-mjk -gr addGWB -f $psr.par $psr.ideal -nofit -dist 1 -alpha -0.6666 -gwamp $amp -ngw 2000 -nreal $nreal -npsr 1 -writeGW $amp.gwb -seed $gwseed
+   fi
+
+   pyr3=0
+   fc=0.1
+   a=2
+   if grep -q $psr red.noise ; then
+	  set -- `grep $psr red.noise`
+	  a=$2
+	  fc=$3
+	  pyr3=$4
+   fi
+	seed=`toasim_seed.py $psr red-$pyr3-$fc-$a`
+
+   echo tempo2-mjk -gr addRedNoise -f $psr.par $psr.ideal -nofit -npsr 1 -seed $seed -Pyr3 $pyr3 -fc $fc -a -$a -nreal $nreal
+   tempo2-mjk -gr addRedNoise -f $psr.par $psr.ideal -nofit -npsr 1 -seed $seed -Pyr3 $pyr3 -fc $fc -a -$a -nreal $nreal > /dev/null 2>&1  &
+done
+
+echo "waiting for processes to finish"
+
+wait

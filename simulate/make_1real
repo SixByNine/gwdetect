@@ -1,0 +1,63 @@
+#!/bin/bash
+ireal=$1
+nthread=8
+amp=5e-14
+
+. ./settings
+
+rm -rf real.$ireal
+mkdir real.$ireal
+cd real.$ireal
+cp ../*.par .
+ln -s ../*.ideal .
+ln -s ../*.add* .
+
+echo "REAL $ireal"
+for i in *.par ; do
+   psr=`basename $i .par`
+   echo tempo2-mjk -gr createRealisation -f $psr.ideal -corn $psr.ideal.addGauss $ireal -corn $psr.ideal.addGWB $ireal -corn $psr.ideal.addRedNoise $ireal
+   tempo2-mjk -gr createRealisation -f $psr.ideal -corn $psr.ideal.addGauss $ireal -corn $psr.ideal.addGWB $ireal -corn $psr.ideal.addRedNoise $ireal > /dev/null
+   mv $psr.ideal.real $psr.tim
+   echo -n "-f $psr.par $psr.tim " >> many
+done
+
+
+if [[ -e ../tempo2.model ]] ;then
+   cp ../*.model .
+else
+
+   for i in *.par ; do
+	  psr=`basename $i .par`
+	  rms=`/u/kei041/bin/get_wrms.py $psr.tim`
+	  tempo2-mjk -gr analyticChol -gwamp $amp -f $psr.par $psr.tim -rms $rms -npsr 1 > /dev/null &
+   done
+
+   echo "wait for analyticChol"
+   wait
+
+   echo "MODEL T2" > tempo2.model
+   for i in J*.model ; do
+	  psr=`basename $i .model`
+	  echo "PSR $psr" >> tempo2.model
+	  echo "INCLUDE $i" >> tempo2.model
+	  if grep -q $psr ../red.noise ; then
+		 set -- `grep $psr ../red.noise`
+		 echo "MODEL T2PowerLaw $2 $4 $3" >> tempo2.model
+	  fi
+   done
+   cp *.model ..
+fi
+
+for i in *.par ; do
+   while [[ `jobs -r | wc -l` -ge $nthread ]] ; do
+	  n=`jobs -r | wc -l`
+	  echo -ne "\rWait ($n/$nthread) running" `date +%T` `cat /proc/loadavg` "    "
+	  sleep 0.25
+   done
+
+   psr=`basename $i .par`
+   echo -e "\rtempo2-mjk -f $psr.par $psr.tim -dcf tempo2.model -outpar $psr.par -nofit -fit f0 -fit f1 -npsr 1"
+   tempo2-mjk -f $psr.par $psr.tim -dcf tempo2.model -outpar $psr.par -nofit -fit f0 -fit f1 > /dev/null &
+   sleep 0.1
+done
+

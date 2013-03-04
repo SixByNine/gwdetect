@@ -1,0 +1,42 @@
+#!/bin/bash
+nthread=8
+amp=1e-14
+. ./settings
+end=$(($nreal-1))
+
+wd=`pwd`
+start=0
+if [[ $# -gt 0 ]] ; then
+   echo $1
+   start=$1
+fi
+if [[ $# -gt 1 ]] ; then
+   echo $2
+   end=$2
+fi
+
+
+
+for trial in `seq $start $end` ; do
+   cd $wd
+
+
+   while [[ `jobs -r | wc -l` -ge $nthread ]] ; do
+	  n=`jobs -r | wc -l`
+	  echo -ne "\rReal $trial - wait ($n/$nthread) running" `date +%T` `cat /proc/loadavg` "   "
+	  sleep 1
+   done
+   if [[ ! -e real.$trial ]] ; then
+	  echo "ERROR NO real.$trial"
+	  exit
+   fi
+   cd real.$trial
+   echo -n "tempo2-mjk -gr detectGWBnew " > cmd
+   cat many >> cmd
+   echo " -nofit -dcf tempo2.model -dt 100  -t1 53430 -t2 55620 -gwamp $amp -fast -py" >> cmd
+
+
+   echo -e "\r" `head -c 80 cmd`"..."
+   /usr/bin/time sh cmd > cmd.log 2>&1 &
+done
+

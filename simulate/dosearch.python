@@ -1,0 +1,33 @@
+#!/bin/bash
+amp=1e-14
+nthread=8
+. ./settings
+
+rm pres_cvm.npy real.*/hd.plot real.*/ff.plot 2nd*
+
+for trial in `seq 0 $(($nreal-1))` ; do
+   if [[ -e real.$trial/result.dat ]] ; then
+	  if [[ ! -e pres.$trial ]] ;then
+
+		 while [[ `jobs -r | wc -l` -ge $nthread ]] ; do
+			n=`jobs -r | wc -l`
+			sleep 0.1
+		 done
+
+		 echo -ne "\rReal $trial  "
+		 if [[ -e pres_cvm.npy ]] ; then
+			detect_GWB.py real.$trial/GW.sum real.$trial $amp -Lpres_cvm $* > 2nd.$trial &
+		 else 
+			echo "Regenerate CVM"
+			detect_GWB.py real.$trial/GW.sum real.$trial $amp -Spres_cvm $*  | tee 2nd.$trial
+			if [[ $? -ne 0 ]] ;then
+			   exit
+			fi
+			echo ""
+		 fi
+	  fi
+   fi
+done
+
+echo "Wait for threads to end"
+wait

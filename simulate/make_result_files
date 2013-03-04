@@ -1,0 +1,32 @@
+#!/bin/bash
+
+rm 2nd old rpt
+
+for i in `seq 0 99` ; do
+   if [[ -e real.$i/result.dat ]] ; then
+	  if [[ -e 2nd.$i ]] ; then
+		 if grep -q -e 'A2=' 2nd.$i ; then
+			echo -n "$i " >> 2nd
+			echo -n "$i " >> old
+			grep A2= 2nd.$i |  sed -e 's:.*A2=::' >> 2nd
+			cat real.$i/result.dat | awk '{print $8,$9}' >> old
+			if [[ -e rpt.$i ]] ; then if grep -q -e 'A2=' rpt.$i ; then
+			   echo -n "$i " >> rpt
+			   grep A2= rpt.$i |  sed -e 's:.*A2=::' >> rpt
+
+			fi ; fi
+
+		 fi
+	  fi
+   fi
+
+done
+
+
+awk '{v=$3*1e30; w=1.0/v/v; k+=$2*w; s+=w; print sqrt(k/s)}' old  | tail -n 1
+awk '{v=$3*1e30; w=1.0/v/v; k+=$2*w; s+=w; print sqrt(k/s)}' 2nd  | tail -n 1
+awk '{v=$3*1e30; w=1.0/v/v; k+=$2*w; s+=w; print sqrt(k/s)}' rpt  | tail -n 1
+
+sort -gk2 old > old.s
+sort -gk2 2nd > 2nd.s
+sort -gk2 rpt > rpt.s

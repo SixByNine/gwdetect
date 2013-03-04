@@ -1,0 +1,15 @@
+#!/bin/bash
+wd=`pwd`
+root=`basename $0`
+. ./settings
+
+\rm *.model
+for trial in `seq 0 $(($nreal-1))` ; do
+   $root/make_1real $trial
+   if [[ ! -e real.$trial ]] ; then
+	  echo "ERROR NO real.$trial"
+	  exit
+   fi
+done
+
+
