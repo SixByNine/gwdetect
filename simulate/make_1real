@@ -12,14 +12,27 @@ cp ../*.par .
 ln -s ../*.ideal .
 ln -s ../*.add* .
 
-echo "REAL $ireal"
+echo -ne "REAL $ireal\r"
 for i in *.par ; do
+   while [[ `jobs -r | wc -l` -ge $nthread ]] ; do
+	  n=`jobs -r | wc -l`
+	  echo -ne "Wait ($n/$nthread) running" `date +%T` `cat /proc/loadavg` "    \r"
+	  sleep 0.05
+   done
+
    psr=`basename $i .par`
-   echo tempo2-mjk -gr createRealisation -f $psr.ideal -corn $psr.ideal.addGauss $ireal -corn $psr.ideal.addGWB $ireal -corn $psr.ideal.addRedNoise $ireal
-   tempo2-mjk -gr createRealisation -f $psr.ideal -corn $psr.ideal.addGauss $ireal -corn $psr.ideal.addGWB $ireal -corn $psr.ideal.addRedNoise $ireal > /dev/null
-   mv $psr.ideal.real $psr.tim
+   nobs=`wc -l $psr.ideal | awk '{print $1+1000}'`
+   echo -ne "$ireal $psr \r"
+   red=""
+   if [[ -e $psr.ideal.addRedNoise ]] ; then
+	  red="-corn $psr.ideal.addRedNoise $ireal"
+   fi
+   echo tempo2-mjk -gr createRealisation -f $psr.ideal -corn $psr.ideal.addGauss $ireal -corn $psr.ideal.addGWB $ireal $red -npsr 1 -nobs $nobs
+   tempo2-mjk -gr createRealisation -f $psr.ideal -corn $psr.ideal.addGauss $ireal -corn $psr.ideal.addGWB $ireal $red -npsr 1 -nobs $nobs  > /dev/null && mv $psr.ideal.real $psr.tim &
    echo -n "-f $psr.par $psr.tim " >> many
 done
+
+wait
 
 
 if [[ -e ../tempo2.model ]] ;then
@@ -29,7 +42,8 @@ else
    for i in *.par ; do
 	  psr=`basename $i .par`
 	  rms=`/u/kei041/bin/get_wrms.py $psr.tim`
-	  tempo2-mjk -gr analyticChol -gwamp $amp -f $psr.par $psr.tim -rms $rms -npsr 1 > /dev/null &
+	  nobs=`wc -l $psr.tim | awk '{print $1+1000}'`
+	  tempo2-mjk -gr analyticChol -gwamp $amp -f $psr.par $psr.tim -rms $rms -npsr 1 -nobs $nobs > /dev/null &
    done
 
    echo "wait for analyticChol"
@@ -40,24 +54,13 @@ else
 	  psr=`basename $i .model`
 	  echo "PSR $psr" >> tempo2.model
 	  echo "INCLUDE $i" >> tempo2.model
-	  if grep -q $psr ../red.noise ; then
-		 set -- `grep $psr ../red.noise`
-		 echo "MODEL T2PowerLaw $2 $4 $3" >> tempo2.model
+	  if grep -q $psr ../psr.noise ; then
+		 set -- `grep $psr ../psr.noise`
+		 if [[ $3 != '0' ]] ; then
+			echo "MODEL T2PowerLaw $4 $3 $5" >> tempo2.model
+		 fi
 	  fi
    done
    cp *.model ..
 fi
-
-for i in *.par ; do
-   while [[ `jobs -r | wc -l` -ge $nthread ]] ; do
-	  n=`jobs -r | wc -l`
-	  echo -ne "\rWait ($n/$nthread) running" `date +%T` `cat /proc/loadavg` "    "
-	  sleep 0.25
-   done
-
-   psr=`basename $i .par`
-   echo -e "\rtempo2-mjk -f $psr.par $psr.tim -dcf tempo2.model -outpar $psr.par -nofit -fit f0 -fit f1 -npsr 1"
-   tempo2-mjk -f $psr.par $psr.tim -dcf tempo2.model -outpar $psr.par -nofit -fit f0 -fit f1 > /dev/null &
-   sleep 0.1
-done
 

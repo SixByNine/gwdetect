@@ -1,0 +1,28 @@
+#!/bin/bash
+amp=1e-14
+nthread=8
+. ./settings
+wd=`pwd`
+for trial in `seq 0 $(($nreal-1))` ; do
+   cd real.$trial
+
+   for p in *.par ; do
+	  psr=`basename $p .par`
+	  if [[ ! -e $psr.bak ]] ; then
+		 cp $psr.par $psr.bak
+	  fi
+	  echo tempo2-mjk -gr cholSpectra -f $psr.bak $psr.tim -outpar $psr.par -dcf tempo2.model
+	  tempo2-mjk -gr cholSpectra -f $psr.bak $psr.tim -outpar $psr.par -dcf tempo2.model -nspec 40 > /dev/null &
+	  while [[ `jobs -r | wc -l` -ge $nthread ]] ; do
+		 n=`jobs -r | wc -l`
+		 sleep 0.5
+	  done
+
+   done
+
+   echo "Real $trial"
+   cd $wd
+done
+
+echo "Wait for threads to end"
+wait

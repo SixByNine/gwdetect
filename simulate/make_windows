@@ -1,0 +1,29 @@
+#!/bin/bash
+nthread=8
+amp=1e-14
+. ./settings
+start=0
+end=$(($nreal-1))
+
+wd=`pwd`
+for trial in `seq $start $end` ; do
+   cd $wd
+
+   if [[ ! -e real.$trial ]] ; then
+	  echo "ERROR NO real.$trial"
+	  exit
+   fi
+   cd real.$trial
+   for par in *.par ; do
+   while [[ `jobs -r | wc -l` -ge $nthread ]] ; do
+	  n=`jobs -r | wc -l`
+	  echo -ne "Real $trial - wait ($n/$nthread) running" `date +%T` `cat /proc/loadavg` "   \r"
+	  sleep 1
+   done
+
+	  psr=`basename $par .par`
+	  echo tempo2-mjk -gr cholSpectra -f $psr.par $psr.tim -nofit -dcf tempo2.model -window -nspec 16
+	  tempo2-mjk -gr cholSpectra -f $psr.par $psr.tim -nofit -dcf tempo2.model -window -nspec 16 > /dev/null &
+   done
+done
+

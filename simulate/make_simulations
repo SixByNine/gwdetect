@@ -14,32 +14,61 @@ for i in *.par ; do
 	  echo "Wait ($n/$nthread) running"
 	  sleep 1
    done
+   if grep -q $psr psr.noise ; then
 
-   tempo2-mjk -gr formIdeal -f $psr.par $psr.simulate
-   mv $psr.simulate.sim $psr.ideal
-
-   tempo2-mjk -gr addGaussian -f $psr.par $psr.ideal -nreal $nreal
-   if [[ -e $amp.gwb ]]; then
-	  echo tempo2-mjk -gr addGWB -f $psr.par $psr.ideal -nofit -dist 1 -alpha -0.6666 -gwamp $amp -ngw 2000 -nreal $nreal -npsr 1 -readGW $amp.gwb -seed $gwseed
-	  tempo2-mjk -gr addGWB -f $psr.par $psr.ideal -nofit -dist 1 -alpha -0.6666 -gwamp $amp -ngw 2000 -nreal $nreal -npsr 1 -readGW $amp.gwb -seed $gwseed > /dev/null 2>&1 &
+	  pw=`grep $psr psr.noise | awk '{print $2}'`
+	  pyr3=`grep $psr psr.noise | awk '{print $3}'`
+	  a=`grep $psr psr.noise | awk '{print $4}'`
+	  fc=`grep $psr psr.noise | awk '{print $5}'`
    else
-	  echo tempo2-mjk -gr addGWB -f $psr.par $psr.ideal -nofit -dist 1 -alpha -0.6666 -gwamp $amp -ngw 2000 -nreal $nreal -npsr 1 -writeGW $amp.gwb -seed $gwseed
-	  tempo2-mjk -gr addGWB -f $psr.par $psr.ideal -nofit -dist 1 -alpha -0.6666 -gwamp $amp -ngw 2000 -nreal $nreal -npsr 1 -writeGW $amp.gwb -seed $gwseed
+	  pw=`get_wrms.py $psr.simulate -psd`
+	  a=0
+	  pyr3=0
+	  fc=0.1
    fi
 
-   pyr3=0
-   fc=0.1
-   a=2
-   if grep -q $psr red.noise ; then
-	  set -- `grep $psr red.noise`
-	  a=$2
-	  fc=$3
-	  pyr3=$4
-   fi
-	seed=`toasim_seed.py $psr red-$pyr3-$fc-$a`
+   nobs=`wc $psr.simulate`
+	noflag="-nobs $nobs -npsr 1"
 
-   echo tempo2-mjk -gr addRedNoise -f $psr.par $psr.ideal -nofit -npsr 1 -seed $seed -Pyr3 $pyr3 -fc $fc -a -$a -nreal $nreal
-   tempo2-mjk -gr addRedNoise -f $psr.par $psr.ideal -nofit -npsr 1 -seed $seed -Pyr3 $pyr3 -fc $fc -a -$a -nreal $nreal > /dev/null 2>&1  &
+
+   tempo2-mjk -gr formIdeal -f $psr.par $psr.simulate $noflag
+
+   grep -v "^EFAC" $psr.simulate.sim > $psr.tt
+   mv $psr.tt $psr.simulate.sim
+   ef=`get_wrms.py $psr.simulate.sim -tpsd=$pw`
+   echo "FORMAT 1" > $psr.ideal
+   echo "EFAC $ef" >> $psr.ideal
+   grep -v "^FORMAT" $psr.simulate.sim >> $psr.ideal
+
+
+
+   echo "$psr W=$pw R=$pyr3 a=$a fc=$fc G=$amp EFAC=$ef"
+   tempo2-mjk -gr addGaussian -f $psr.par $psr.ideal -nreal $nreal
+
+	if [[ ! -e $amp.gwb ]]; then
+	  head -n 12 $psr.ideal > ttt.ideal
+	  tempo2-mjk -gr addGWB -f $psr.par ttt.ideal -nofit -dist 1 -alpha -0.6666 -gwamp $amp -ngw 2000 -nreal $nreal -npsr 1 -writeGW $amp.gwb -seed $gwseed $noflag
+	  rm ttt.*
+	fi
+
+   if [[ -e $amp.gwb ]]; then
+	  echo tempo2-mjk -gr addGWB -f $psr.par $psr.ideal -nofit -dist 1 -alpha -0.6666 -gwamp $amp -ngw 2000 -nreal $nreal -npsr 1 -readGW $amp.gwb -seed $gwseed $noflag
+	  tempo2-mjk -gr addGWB -f $psr.par $psr.ideal -nofit -dist 1 -alpha -0.6666 -gwamp $amp -ngw 2000 -nreal $nreal -npsr 1 -readGW $amp.gwb -seed $gwseed $noflag > /dev/null 2>&1 &
+   else
+	  echo "ERROR"
+	  exit 1
+#	  echo tempo2-mjk -gr addGWB -f $psr.par $psr.ideal -nofit -dist 1 -alpha -0.6666 -gwamp $amp -ngw 2000 -nreal $nreal -npsr 1 -writeGW $amp.gwb -seed $gwseed $noflag
+#	  tempo2-mjk -gr addGWB -f $psr.par $psr.ideal -nofit -dist 1 -alpha -0.6666 -gwamp $amp -ngw 2000 -nreal $nreal -npsr 1 -writeGW $amp.gwb -seed $gwseed $noflag
+   fi
+
+   seed=`toasim_seed.py $psr red-$pyr3-$fc-$a`
+
+
+   if grep -q $psr psr.noise ; then
+
+	  echo tempo2-mjk -gr addRedNoise -f $psr.par $psr.ideal -nofit -npsr 1 -seed $seed -Pyr3 $pyr3 -fc $fc -a -$a -nreal $nreal
+	  tempo2-mjk -gr addRedNoise -f $psr.par $psr.ideal -nofit -npsr 1 -seed $seed -Pyr3 $pyr3 -fc $fc -a -$a -nreal $nreal $noflag > /dev/null 2>&1  &
+   fi
 done
 
 echo "waiting for processes to finish"

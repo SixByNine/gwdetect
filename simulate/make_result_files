@@ -1,32 +1,48 @@
 #!/bin/bash
+. ./settings
 
-rm 2nd old rpt
+rm fpy old cpy 2nd
 
-for i in `seq 0 99` ; do
-   if [[ -e real.$i/result.dat ]] ; then
+for i in `seq 0 $nreal` ; do
+   if [[ -e real.$i/GW.sum ]] ; then
+	  if [[ -e fpy.$i ]] ; then
+		 if grep -q -e 'A2=' fpy.$i ; then
+			echo -n "$i " >> fpy
+			grep A2= fpy.$i |  sed -e 's:.*A2=::' >> fpy
+		 fi
+	  fi
 	  if [[ -e 2nd.$i ]] ; then
 		 if grep -q -e 'A2=' 2nd.$i ; then
 			echo -n "$i " >> 2nd
-			echo -n "$i " >> old
 			grep A2= 2nd.$i |  sed -e 's:.*A2=::' >> 2nd
-			cat real.$i/result.dat | awk '{print $8,$9}' >> old
-			if [[ -e rpt.$i ]] ; then if grep -q -e 'A2=' rpt.$i ; then
-			   echo -n "$i " >> rpt
-			   grep A2= rpt.$i |  sed -e 's:.*A2=::' >> rpt
-
-			fi ; fi
-
 		 fi
 	  fi
+
+	  if [[ -e cpy.$i ]] ; then if grep -q -e 'A2=' cpy.$i ; then
+		 echo -n "$i " >> old
+		 cat real.$i/result.dat | awk '{print $8,$9}' >> old
+		 echo -n "$i " >> cpy
+		 grep A2= cpy.$i |  sed -e 's:.*A2=::' >> cpy
+	  fi 
+
    fi
+fi
 
 done
 
 
+echo "old"
 awk '{v=$3*1e30; w=1.0/v/v; k+=$2*w; s+=w; print sqrt(k/s)}' old  | tail -n 1
+awk '{v=$3*1e30; w=1.0; k+=$2*w; s+=w; print sqrt(k/s)}' old  | tail -n 1
+echo "py"
 awk '{v=$3*1e30; w=1.0/v/v; k+=$2*w; s+=w; print sqrt(k/s)}' 2nd  | tail -n 1
-awk '{v=$3*1e30; w=1.0/v/v; k+=$2*w; s+=w; print sqrt(k/s)}' rpt  | tail -n 1
+echo "cpy"
+awk '{v=$3*1e30; w=1.0/v/v; k+=$2*w; s+=w; print sqrt(k/s)}' cpy  | tail -n 1
+echo "fpy"
+awk '{v=$3*1e30; w=1.0/v/v; k+=$2*w; s+=w; print sqrt(k/s)}' fpy  | tail -n 1
+awk '{v=$3*1e30; w=1.0; k+=$2*w; s+=w; print sqrt(k/s)}' fpy  | tail -n 1 
 
 sort -gk2 old > old.s
 sort -gk2 2nd > 2nd.s
-sort -gk2 rpt > rpt.s
+sort -gk2 fpy > fpy.s
+sort -gk2 cpy > cpy.s

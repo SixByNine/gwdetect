@@ -1,0 +1,44 @@
+#!/bin/bash
+amp=1e-14
+nthread=8
+
+function fitone {
+   tempo2-mjk `cat many` -newpar -dcf tempo2.model  > /dev/null
+   i=1
+   for p in *.par ; do
+	  new=`echo $i | awk '{printf("new.par_%d",$1)}'`
+	  mv $new $p
+	  i=$(($i+1))
+   done
+}
+
+. ./settings
+wd=`pwd`
+for trial in `seq 0 $(($nreal-1))` ; do
+   while [[ `jobs -r | wc -l` -ge $nthread ]] ; do
+	  n=`jobs -r | wc -l`
+	  echo -ne "Real $trial (wait $n)\r"
+	  sleep 0.5
+   done
+   echo -ne "Real $trial              \r"
+
+   cd real.$trial
+
+   for p in *.par ; do
+	  psr=`basename $p .par`
+	  if [[ ! -e $psr.bak ]] ; then
+		 cp $psr.par $psr.bak
+	  else
+		 cp $psr.bak $psr.par
+	  fi
+
+   done
+
+   fitone &
+   cd $wd
+
+done
+
+echo ""
+echo "Wait for threads to end"
+wait

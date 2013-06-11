@@ -33,7 +33,7 @@ for trial in `seq $start $end` ; do
    cd real.$trial
    echo -n "tempo2-mjk -gr detectGWBnew " > cmd
    cat many >> cmd
-   echo " -nofit -dcf tempo2.model -dt 100  -t1 53430 -t2 55620 -gwamp $amp -fast -py" >> cmd
+   echo " -nofit -dcf tempo2.model -dt $dt  -t1 $t1 -t2 $t2 -gwamp $amp -fast -py" >> cmd
 
 
    echo -e "\r" `head -c 80 cmd`"..."

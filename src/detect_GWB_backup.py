@@ -17,6 +17,7 @@ def detect_GWB(A_guess,infile,path,args):
     saveCVM=False
     loadCVM=False
     writeSpec=False
+    diag=False
     skipem=list()
     max_channels=10
     start_channel=0
@@ -24,14 +25,15 @@ def detect_GWB(A_guess,infile,path,args):
     white_factor=1.0
     red_file=None
     factor_file=None
-    ch1f=False
     for arg in args:
         if arg=="-p":
             diagPlots=True
         if arg.startswith("-S"):
-            saveCVM=arg[2:]+".npz"
+            saveCVM=arg[2:]+".npy"
+            saveCVMi=arg[2:]+"_i.npy"
         if arg.startswith("-L"):
-            loadCVM=arg[2:]+".npz"
+            loadCVM=arg[2:]+".npy"
+            loadCVMi=arg[2:]+"_i.npy"
         if arg.startswith("-k"):
             skipem.append(arg[2:])
         if arg.startswith("-F"):
@@ -50,8 +52,8 @@ def detect_GWB(A_guess,infile,path,args):
             red_file=arg[2:]
         if arg.startswith("-f"):
             factor_file=arg[2:]+".npy"
-        if arg.startswith("--ch1factor"):
-            ch1f=True
+        if arg.startswith("-D"):
+            diag=True
 
 
     pairs=list()
@@ -166,7 +168,7 @@ def detect_GWB(A_guess,infile,path,args):
         else:
             m2.red=[]
 
-        if writeSpec:
+        if saveCVM or writeSpec:
             freq=xspec[p][0]
             mp1=m1.value(freq)
             mp2=m2.value(freq)
@@ -210,19 +212,7 @@ def detect_GWB(A_guess,infile,path,args):
     if factor_file != None:
         print "Loaded gain factors"
         factors=load(factor_file)
-    if ch1f:
-        print "Gain factor 0.6 for ch1"
-        p=0
-        i=0
-        while p < np:
-            f=0
-            mx=min(len(xspec[p][0]),max_channels)
-            while f < mx:
-                if f==0:
-                    factors[i]*=0.6
-                i+=1
-                f+=1
-            p+=1
+
 
     p=0
     i=0
@@ -241,24 +231,14 @@ def detect_GWB(A_guess,infile,path,args):
 
     if loadCVM != False:
         print "Load precomputed Covariance matrix"
-        data=load(loadCVM)
-        cinv=data['I0']
-        covar_GW4=data['GW4']
-        covar_GW2=data['GW2']
-        covar_PN=data['PN']
-        covar_GN=data['GN']
-        covar = covar_GW2+covar_GW4+covar_PN
+        covar=load(loadCVM)
     else:
-        covar_GW2=zeros((N,N))
-        covar_GW4=zeros((N,N))
-        covar_PN=zeros((N,N))
-        covar_GN=zeros((N,N))
+        covar=zeros((N,N))
 
         print "Compute GW covariances"
 
         
         GWcovar=zeros((np,np))
-        noGWvar=zeros(np)
         # compute the GW covariances
         ij=0
         while ij < np:
@@ -268,6 +248,9 @@ def detect_GWB(A_guess,infile,path,args):
             stdout.flush()
             lm=0
             while lm <= ij:
+                if diag and ij!=lm:
+                    lm+=1
+                    continue
                 #psr3=pairs[lm][0]
                 #psr4=pairs[lm][1]
                 zeta_ij,zeta_lm,zeta_il,zeta_jm,zeta_im,zeta_jl = getZetas(ij,lm,pairs,zeta)
@@ -275,8 +258,6 @@ def detect_GWB(A_guess,infile,path,args):
                 #print "%s %s %s %s %.4f %.4f %.4f %.4f %.4f %.4f %g"%(psr1,psr2,psr3,psr4,zeta_ij,zeta_lm,zeta_il,zeta_jm,zeta_im,zeta_jl,C)
                 GWcovar[ij][lm]=C
                 GWcovar[lm][ij]=C
-                if ij==lm:
-                    noGWvar[ij]=0.5 * pow(A_guess,4)/(zeta_ij*zeta_lm)
                 lm+=1
             ij+=1
 
@@ -318,133 +299,104 @@ def detect_GWB(A_guess,infile,path,args):
 
 #                print X,psr1,psr2,psr3,psr4,f1,f2,Ts[ij][1],Ts[lm][1]
                 
-                # noise only corrlates if at least one pulsar appears twice
-                if psr2==psr3 or psr1==psr4 or psr1==psr3 or psr2==psr4:
+                # The noise is only relevent for the same pulsar pair.
+                if ij==lm:
+                    psr1=pairs[ij][0]
+                    psr2=pairs[ij][1]
                     fa=(f1+f2)/2.0
-                    zeta_ij,zeta_lm,zeta_il,zeta_jm,zeta_im,zeta_jl = getZetas(ij,lm,pairs,zeta)
                     #fa=min(f1,f2)
                     P1 = pwr_models[ij][0].value(fa)
                     P2 = pwr_models[ij][1].value(fa)
-                    C=0
-                    if psr2==psr3:
-                        C += 0.5 * (P2*A2_guess)*zeta_im/zeta_ij/zeta_lm/P_gw_nrm(fa)/factor
-                    if psr1==psr4:
-                        C += 0.5 * (P1*A2_guess)*zeta_jl/zeta_ij/zeta_lm/P_gw_nrm(fa)/factor
-                    if psr1==psr3:
-                        C += 0.5 * (P1*A2_guess)*zeta_jm/zeta_ij/zeta_lm/P_gw_nrm(fa)/factor
-                    if psr2==psr4:
-                        C += 0.5 * (P2*A2_guess)*zeta_il/zeta_ij/zeta_lm/P_gw_nrm(fa)/factor
-                    if ij==lm:
-                        C += 0.5 * (P1*P2)/pow(zeta[ij]*P_gw_nrm(fa),2)/factor
-                        #C += 0.5 * (P1*A2_guess)/pow(zeta[ij]*factor,2)/P_gw_nrm(fa)/factor
-                        #C += 0.5 * (P2*A2_guess)/pow(zeta[ij]*factor,2)/P_gw_nrm(fa)/factor
-                        covar_PN[a][b] += X*C
-                        if a!=b:
-                            covar_PN[b][a] += X*C
-                    else:
-                        covar_GW2[a][b] += X*C
-                        covar_GW2[b][a] += X*C
 
-
-
-                C=GWcovar[ij][lm]/factor
-                covar_GW4[a][b] += X*C
-                if a!=b:
-                    covar_GW4[b][a] += X*C
-                if ij==lm:
-                    C=noGWvar[ij]/factor
-                    covar_GN[a][b] += X*C
+                    C = 0.5 * (P1*P2)/pow(zeta[ij]*P_gw_nrm(fa),2)/factor
+                    C += 0.5 * (P1*A2_guess)/pow(zeta[ij]*factor,2)/P_gw_nrm(fa)/factor
+                    C += 0.5 * (P2*A2_guess)/pow(zeta[ij]*factor,2)/P_gw_nrm(fa)/factor
+                    covar[a][b] += X*C
                     if a!=b:
-                        covar_GN[b][a] += X*C
+                        covar[b][a] += X*C
+
+                if diag and ij!=lm:
+                    b+=1
+                    continue
+                C=GWcovar[ij][lm]/factor
+                covar[a][b] += X*C
+                if a!=b:
+                    covar[b][a] += X*C
                 b+=1
             a+=1
 
         print "Done"
 
-        covar=covar_GW4 +covar_GW2 + covar_PN
+
+
+        if diag:
+            print "DIAG GW"
+                        
+
+    if saveCVM != False:
+        print "Save Covariance matrix"
+        save(saveCVM,covar)
+
+
+    M=zeros(N)+1
+    if loadCVM != False:
+        print "Load precomputed inverse of CVM"
+        cinv=load(loadCVMi)
+    else:
         print "Inverting matrix"
         stdout.flush()
         cinv = lalg.inv(covar)
         print "Done"
 
-                        
     if saveCVM != False:
-        print "Save Covariance matrix"
-        savez(saveCVM,GW2=covar_GW2,GW4=covar_GW4, GN=covar_GN, PN=covar_PN,I0=cinv)
+        print "Save inverse matrix"
+        save(saveCVMi,cinv)
 
 
-    iteration=0
-    niterations=3
-    a=1.0
-    azero=False
-    while iteration < niterations:
-        if iteration > 0:
-            print "Inverting matrix"
-            stdout.flush()
-            covar=a*a*covar_GW4 + pow(1-a,2)*covar_GN + covar_PN + a*covar_GW2
-            cinv = lalg.inv(covar)
-            print "Done"
+    eq1=1.0/dot(dot(M,cinv),M)
 
-        iteration+=1
-        print "Iteration %d, a=%.2f"%(iteration,a)
+    eq2=dot(M,cinv)
 
-        M=zeros(N)+1
+    W=eq1*eq2
+    print "Weights sum =",sum(W)
+    if False:
+        fff=open("W","w")
+        i=0
+        while i < len(W):
+            ij=covar_idx[i][0]
+            psr1=pairs[ij][0]
+            psr2=pairs[ij][1]
+            f=covar_idx[i][1]
+            fff.write("%d %s %s %g %g %g\n"%(i,psr1,psr2,f,W[i],A2ijk[i]))
+            i+=1
 
-        eq1=1.0/dot(dot(M,cinv),M)
+        fff.close()
 
-        eq2=dot(M,cinv)
+    A2=dot(W,A2ijk)
 
-        W=eq1*eq2
-        print "Weights sum =",sum(W)
-        if False:
-            fff=open("W","w")
-            i=0
-            while i < len(W):
-                ij=covar_idx[i][0]
-                psr1=pairs[ij][0]
-                psr2=pairs[ij][1]
-                f=covar_idx[i][1]
-                fff.write("%d %s %s %g %g %g\n"%(i,psr1,psr2,f,W[i],A2ijk[i]))
-                i+=1
+    varA2 = sum(W*W*power(A2-A2ijk,2))/pow(sum(W),2)
+    E = sqrt(varA2)
 
-            fff.close()
+    MX=A2-A2ijk
+    chisq = dot(MX,dot(cinv,MX))
+    print "CHISQ(A2)",chisq,chisq/float(len(A2ijk))
 
-        A2=dot(W,A2ijk)
+    MX=A2_guess-A2ijk
+    chisq = dot(MX,dot(cinv,MX))
+    print "CHISQ(A2_guess)",chisq,chisq/float(len(A2ijk))
 
-        varA2 = sum(W*W*power(A2-A2ijk,2))/pow(sum(W),2)
-        E = sqrt(varA2)
+    MX=A2+E-A2ijk
+    chisq = dot(MX,dot(cinv,MX))
+    print "CHISQ(A2+E)",chisq,chisq/float(len(A2ijk))
 
-        MX=A2-A2ijk
-        chisq = dot(MX,dot(cinv,MX))
-        print "CHISQ(A2)",chisq,chisq/float(len(A2ijk))
+    MX=A2-E-A2ijk
+    chisq = dot(MX,dot(cinv,MX))
+    print "CHISQ(A2-E)",chisq,chisq/float(len(A2ijk))
+    
+    F=zeros(N)+A2_guess
+    ryan_parameter = dot(F,dot(cinv,A2ijk))
+    print "RYAN",ryan_parameter
 
-        MX=A2_guess-A2ijk
-        chisq = dot(MX,dot(cinv,MX))
-        print "CHISQ(A2_guess)",chisq,chisq/float(len(A2ijk))
-
-        MX=A2+E-A2ijk
-        chisq = dot(MX,dot(cinv,MX))
-        print "CHISQ(A2+E)",chisq,chisq/float(len(A2ijk))
-
-        MX=A2-E-A2ijk
-        chisq = dot(MX,dot(cinv,MX))
-        print "CHISQ(A2-E)",chisq,chisq/float(len(A2ijk))
-        
-        newa=A2/A2_guess
-        print "A2 %.3g %.3g"%(A2,E)
-        print "A2/A2_guess",newa
-        if newa < 0 and a == 0:
-            break
-        if newa < 0:
-            newa=0
-        if newa > 1:
-            a=1
-            break
-        a=newa
-
-
-
-        
     
     pair_W = list()
 #    pair_W = zeros((np,max_channels))
