@@ -3,6 +3,7 @@ from sys import argv,stdout
 from math import *
 from numpy import *
 from numpy import linalg as lalg
+from scipy import linalg as slalg
 from matplotlib import pyplot as plt
 import random
 
@@ -242,7 +243,6 @@ def detect_GWB(A_guess,infile,path,args):
     if loadCVM != False:
         print "Load precomputed Covariance matrix"
         data=load(loadCVM)
-        cinv=data['I0']
         covar_GW4=data['GW4']
         covar_GW2=data['GW2']
         covar_PN=data['PN']
@@ -339,38 +339,34 @@ def detect_GWB(A_guess,infile,path,args):
                         #C += 0.5 * (P1*A2_guess)/pow(zeta[ij]*factor,2)/P_gw_nrm(fa)/factor
                         #C += 0.5 * (P2*A2_guess)/pow(zeta[ij]*factor,2)/P_gw_nrm(fa)/factor
                         covar_PN[a][b] += X*C
-                        if a!=b:
-                            covar_PN[b][a] += X*C
+ #                       if a!=b:
+ #                           covar_PN[b][a] += X*C
                     else:
                         covar_GW2[a][b] += X*C
-                        covar_GW2[b][a] += X*C
+  #                      covar_GW2[b][a] += X*C
 
 
 
                 C=GWcovar[ij][lm]/factor
                 covar_GW4[a][b] += X*C
-                if a!=b:
-                    covar_GW4[b][a] += X*C
+#                if a!=b:
+#                    covar_GW4[b][a] += X*C
                 if ij==lm:
                     C=noGWvar[ij]/factor
                     covar_GN[a][b] += X*C
-                    if a!=b:
-                        covar_GN[b][a] += X*C
+#                    if a!=b:
+#                        covar_GN[b][a] += X*C
                 b+=1
             a+=1
 
         print "Done"
 
         covar=covar_GW4 +covar_GW2 + covar_PN
-        print "Inverting matrix"
-        stdout.flush()
-        cinv = lalg.inv(covar)
-        print "Done"
 
                         
     if saveCVM != False:
         print "Save Covariance matrix"
-        savez(saveCVM,GW2=covar_GW2,GW4=covar_GW4, GN=covar_GN, PN=covar_PN,I0=cinv)
+        savez(saveCVM,GW2=covar_GW2,GW4=covar_GW4, GN=covar_GN, PN=covar_PN)
 
 
     iteration=0
@@ -382,7 +378,6 @@ def detect_GWB(A_guess,infile,path,args):
             print "Inverting matrix"
             stdout.flush()
             covar=a*a*covar_GW4 + pow(1-a,2)*covar_GN + covar_PN + a*covar_GW2
-            cinv = lalg.inv(covar)
             print "Done"
 
         iteration+=1
@@ -390,9 +385,8 @@ def detect_GWB(A_guess,infile,path,args):
 
         M=zeros(N)+1
 
-        eq1=1.0/dot(dot(M,cinv),M)
-
-        eq2=dot(M,cinv)
+        eq2=slalg.solve(covar,M,sym_pos=True,check_finite=False,lower=True)
+        eq1=1.0/dot(eq2,M)
 
         W=eq1*eq2
         print "Weights sum =",sum(W)
@@ -414,21 +408,30 @@ def detect_GWB(A_guess,infile,path,args):
         varA2 = sum(W*W*power(A2-A2ijk,2))/pow(sum(W),2)
         E = sqrt(varA2)
 
-        MX=A2-A2ijk
-        chisq = dot(MX,dot(cinv,MX))
-        print "CHISQ(A2)",chisq,chisq/float(len(A2ijk))
+        compute_chisq=False
+        if compute_chisq:
+            MX=A2-A2ijk
+            Z=slalg.solve(covar,MX,sym_pos=True)
+            chisq = dot(MX,Z)
+            print "CHISQ(A2)",chisq,chisq/float(len(A2ijk))
 
-        MX=A2_guess-A2ijk
-        chisq = dot(MX,dot(cinv,MX))
-        print "CHISQ(A2_guess)",chisq,chisq/float(len(A2ijk))
+            MX=A2_guess-A2ijk
 
-        MX=A2+E-A2ijk
-        chisq = dot(MX,dot(cinv,MX))
-        print "CHISQ(A2+E)",chisq,chisq/float(len(A2ijk))
+            Z=slalg.solve(covar,MX,sym_pos=True)
+            chisq = dot(MX,Z)
+            print "CHISQ(A2_guess)",chisq,chisq/float(len(A2ijk))
 
-        MX=A2-E-A2ijk
-        chisq = dot(MX,dot(cinv,MX))
-        print "CHISQ(A2-E)",chisq,chisq/float(len(A2ijk))
+            MX=A2+E-A2ijk
+
+            Z=slalg.solve(covar,MX,sym_pos=True)
+            chisq = dot(MX,Z)
+            print "CHISQ(A2+E)",chisq,chisq/float(len(A2ijk))
+
+            MX=A2-E-A2ijk
+
+            Z=slalg.solve(covar,MX,sym_pos=True)
+            chisq = dot(MX,Z)
+            print "CHISQ(A2-E)",chisq,chisq/float(len(A2ijk))
         
         newa=A2/A2_guess
         print "A2 %.3g %.3g"%(A2,E)
@@ -585,7 +588,14 @@ def detect_GWB(A_guess,infile,path,args):
 
 
 
+zeta_lookup=dict()
 def getZetas(p1, p2, pairs,zetas):
+    key="%d %d"%(p1,p2)
+    if key not in zeta_lookup:
+        zeta_lookup[key] = _getZetas(p1,p2,pairs,zetas)
+    return zeta_lookup[key]
+
+def _getZetas(p1, p2, pairs,zetas):
     psr_i = pairs[p1][0]
     psr_j = pairs[p1][1]
     psr_l = pairs[p2][0]
@@ -597,32 +607,50 @@ def getZetas(p1, p2, pairs,zetas):
     zeta_jm=1
     zeta_im=1
     zeta_jl=1
+    idx=0
+    if psr_i != psr_l:
+        for pp in pairs:
+            if pp[0] == psr_i and pp[1]==psr_l:
+                zeta_il = zetas[idx]
+                break
+            elif pp[1] == psr_i and pp[0]==psr_l:
+                zeta_il = zetas[idx]
+                break
+            idx+=1
 
     idx=0
-    for pp in pairs:
-        if pp[0] == psr_i and pp[1]==psr_l:
-            zeta_il = zetas[idx]
-        if pp[1] == psr_i and pp[0]==psr_l:
-            zeta_il = zetas[idx]
+    if psr_j != psr_m:
+        for pp in pairs:
+            if pp[0] == psr_j and pp[1]==psr_m:
+                zeta_jm = zetas[idx]
+                break
+            elif pp[1] == psr_j and pp[0]==psr_m:
+                zeta_jm = zetas[idx]
+                break
+            idx+=1
 
-        if pp[0] == psr_j and pp[1]==psr_m:
-            zeta_jm = zetas[idx]
-        if pp[1] == psr_j and pp[0]==psr_m:
-            zeta_jm = zetas[idx]
+    idx=0
+    if psr_i != psr_m:
+        for pp in pairs:
+            if pp[0] == psr_i and pp[1]==psr_m:
+                zeta_im = zetas[idx]
+                break
+            elif pp[1] == psr_i and pp[0]==psr_m:
+                zeta_im = zetas[idx]
+                break
+            idx+=1
 
-        if pp[0] == psr_i and pp[1]==psr_m:
-            zeta_im = zetas[idx]
-        if pp[1] == psr_i and pp[0]==psr_m:
-            zeta_im = zetas[idx]
+    idx=0
+    if psr_j != psr_l:
+        for pp in pairs:
+            if pp[0] == psr_j and pp[1]==psr_l:
+                zeta_jl = zetas[idx]
+                break
+            elif pp[1] == psr_j and pp[0]==psr_l:
+                zeta_jl = zetas[idx]
+                break
 
-        if pp[0] == psr_j and pp[1]==psr_l:
-            zeta_jl = zetas[idx]
-        if pp[1] == psr_j and pp[0]==psr_l:
-            zeta_jl = zetas[idx]
-
-        idx+=1
-
-
+            idx+=1
 
     return zeta_ij,zeta_lm,zeta_il,zeta_jm,zeta_im,zeta_jl
 
@@ -679,7 +707,14 @@ def P_gw_nrm(freq):
 def crossW(f,T):
     return T *power(sin(pi*f*T)/(pi*f*T),2.0)
 
+crossCovar_lookup=dict()
 def crossCovar(delta,T1,T2,bw):
+    key="%g %g %g %g"%(delta,T1,T2,bw)
+    if key not in crossCovar_lookup:
+        crossCovar_lookup[key] = _crossCovar(delta,T1,T2,bw)
+    return crossCovar_lookup[key]
+
+def _crossCovar(delta,T1,T2,bw):
     delta/=2.0
     rnge = bw*2.5
     fs=linspace(-rnge,rnge,30)

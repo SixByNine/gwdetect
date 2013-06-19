@@ -48,7 +48,7 @@ avg/=W
 avgE2/=W*W
 avgE = sqrt(avgE2)
 
-aa=linspace(0,pi,128)
+aa=linspace(0.01,pi,128)
 x=(1.0-cos(aa))/2.0
 azeta=(3.0/2.0)*x*log(x) - x/4.0 + 0.5
 x=(1.0-cos(pi*angles/180.0))/2.0

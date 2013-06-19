@@ -37,12 +37,30 @@ class ifunc_simulator:
         self.curr = dict()
         self.tsamp = 60.0
         for line in f:
+            if line.startswith("#"):
+                continue
             elems=line.split()
             psr=elems[0]
-            psd10=float(elems[1])
-            psd20=float(elems[2])
-            psd40=float(elems[3])
-            self.curr[psr]=dict(psd=array([psd10,psd20,psd40]),lda=array([0.1,0.2,0.4]),rte=self.tsamp/array([15,10,15]))
+            if elems[1] == "FILE":
+                psdfile = open(elems[2])
+                psd=list()
+                lda=list()
+                rte=list()
+                for l2 in psdfile:
+                    e2=l2.split()
+                    freq=float(e2[0])*1e6
+                    psd.append(float(e2[1]))
+                    lda.append(3e8/freq)
+                    rte.append(self.tsamp/15)
+                psd=array(psd)
+                lda=array(lda)
+                rte=array(rte)
+                self.curr[psr]=dict(psd=psd,lda=lda,rte=rte)
+            else:
+                psd10=float(elems[1])
+                psd20=float(elems[2])
+                psd40=float(elems[3])
+                self.curr[psr]=dict(psd=array([psd10,psd20,psd40]),lda=array([0.1,0.2,0.4]),rte=self.tsamp/array([15,10,15]))
             self.psd2sma(self.curr[psr])
 
         self.psrs=self.curr.keys()
@@ -57,6 +75,7 @@ class ifunc_simulator:
         f.write("#PSRJ  (us)  10cm    20cm    40cm    UWL   ;   W10cm   W13cm   W17cm   W20cm   W30cm   W40cm R:CM R:DM\n")
         ff.write("PSRJ  &  10cm  &  20cm &   40cm &   UWL   &   W10cm &  W13cm  & W17cm &  W20cm &  W30cm  & W40cm &R:CM &R:DM\\\\\n")
         for psr in self.psrs:
+            c10=c20=c40=0
             for i in range(len(self.curr[psr]['sma'])):
                 if self.curr[psr]['lda'][i]==0.1:
                     c10=self.curr[psr]['sma'][i]
@@ -81,7 +100,7 @@ class ifunc_simulator:
             if W_CM < 30e-9:
                 flag="*"
 
-            f.write("%s % 7.3f % 7.3f % 7.3f % 7.3f%s; % 7.3f % 7.3f % 7.3f % 7.3f % 7.3f % 7.3f %4.2f %4.2f\n"%(psr,c10,c20,c40,ww,flag,uwl[0],uwl[1],uwl[2],uwl[3],uwl[4],uwl[5],C_CM/W_CM,C_DM/W_DM))
+            f.write("%s % 7.3f % 7.3f % 7.3f % 7.3f%s; % 7.3f % 7.3f % 7.3f % 7.3f % 7.3f % 7.3f %4.2f %4.2f % 7.3f % 7.3f\n"%(psr,c10,c20,c40,ww,flag,uwl[0],uwl[1],uwl[2],uwl[3],uwl[4],uwl[5],C_CM/W_CM,C_DM/W_DM,C_CM*1e6,C_DM*1e6))
             ff.write("%s &% 7.3f &% 7.3f &% 7.3f &% 7.3f%s& % 7.3f &% 7.3f &% 7.3f &% 7.3f &% 7.3f &% 7.3f &%4.2f &%4.2f\\\\\n"%(psr,c10,c20,c40,ww,flag,uwl[0],uwl[1],uwl[2],uwl[3],uwl[4],uwl[5],C_CM/W_CM,C_DM/W_DM))
 
         f.close()
@@ -317,6 +336,7 @@ class ifunc_simulator:
 
         self.wbr=dict()
         for psr in self.psrs: 
+            LREF=0.2
             lda=list()
             sma=list()
             clda=self.curr[psr]['lda']
@@ -332,16 +352,23 @@ class ifunc_simulator:
                 if l==0.4:
                     s40=s
 
+            if s10==0:
+                s10=1
+            if s20==0:
+                s20=1
+                LREF=clda[0]
+            if s40==0:
+                s40=1
             s10*=sqrt(900)*(21./38.)
             s20*=sqrt(256)
             s40*=sqrt(64)*(28./31.)
             s13=(s10+s20)/2.0
             s17=(s10*0.5 + s20)/1.5
             s30=(s20+s40)/2.0
-            print psr,s10,s13,s17,s20,s40
+            print "UWL",psr,s10,s13,s17,s20,s40
 
             for l in clda:
-                if l==0.2 or (len(self.xtra) == 0 and l==0.4):
+                if l==LREF or (len(self.xtra) == 0 and l==0.4):
                     # 2380 - 4000
                     sig = s10 / sqrt(1620)
                     lam = 0.094
