@@ -17,13 +17,16 @@ else:
 f1=abs(f1)
 
 
-sectoyear=365.25*86400.0
+ustoyear=365.25*86400.0*1e6
 
 
-A=pow(sectoyear,-4) * 4 * pow(pow(f0,-1.4) * pow(f1/1e-15,1.1)  * pow(10,1.6),2)
+#A=pow(sectoyear,-4) * 4 * pow(pow(f0,-1.4) * pow(f1/1e-15,1.1)  * pow(10,1.6),2)
+Aus2yr= 2 * pow(pow(f0,-1.4) * pow(f1/1e-15,1.1),2)
+
+Ayr3 = Aus2yr / pow(ustoyear,2)
 
 alpha=5
 fc=0.05
-print alpha,A*pow(fc,-alpha),fc
+print alpha,Ayr3*pow(fc,-alpha),fc
 
 

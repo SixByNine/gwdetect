@@ -23,6 +23,8 @@ class ifunc_simulator:
             GWcor=False
         if "-noop" in args:
             noop=True
+        if "-nogw" in args:
+            Agwb=0
  
         print "Nreal=",Nreal
         self.xtra=list()
@@ -35,6 +37,7 @@ class ifunc_simulator:
         f.close()
         f=open("psd.list")
         self.curr = dict()
+        self.red = dict()
         self.tsamp = 60.0
         for line in f:
             if line.startswith("#"):
@@ -68,6 +71,22 @@ class ifunc_simulator:
         npsr=len(self.psrs)
         print npsr
         self.curr2wbr()
+        f.close()
+
+
+        f=open("red.noise")
+        for line in f:
+            if line.startswith("#"):
+                continue
+            elems=line.split()
+            psr=elems[0]
+            alpha=float(elems[1])
+            amp=float(elems[2])
+            fc=float(elems[3])
+            if alpha > 0:
+                alpha = -alpha
+            self.red[psr] = dict(amp=amp,alpha=alpha,fc=fc)
+            pass
         f.close()
 
         f=open("toa.list","w")
@@ -154,6 +173,16 @@ class ifunc_simulator:
             print "NO GW correlation!!!!!"
             print "NO GW correlation!!!!!"
             timeseries=data
+
+        print "RED noise"
+        i=0
+        for psr in self.psrs:
+            if psr in self.red:
+                print psr," RED ",self.red[psr]["alpha"],self.red[psr]["fc"],self.red[psr]["amp"]
+                ts = self.make_red_noise(N,Nreal,self.red[psr]["alpha"],self.tsamp/365.25,self.red[psr]["amp"],gw=False,fc=self.red[psr]["fc"]) # Make non-GW red noise
+                timeseries[i]+=ts
+            i+=1
+
 
         psrts_cur=dict()
         psrts_wbr=dict()
@@ -268,13 +297,17 @@ class ifunc_simulator:
 
 
 
-    def make_red_noise(self,N,M,alpha,dt,gwamp):
+    def make_red_noise(self,N,M,alpha,dt,gwamp,gw=True,fc=0.05):
         L=M*N
         spec=zeros(L,dtype=dtype(complex))
         freq=fft.fftfreq(L,dt)
-        amp = gwamp*gwamp / 12.0 / pi / pi # yr3
+        if gw:
+            amp = gwamp*gwamp / 12.0 / pi / pi # yr3
+        else:
+            print "TEST",fc,alpha,gwamp
+            amp=gwamp/pow(fc,alpha) # For non-GW red noise
         print "A (yr3) =",amp
-        print "A (fc) =",amp*pow(0.0497616,alpha)
+        print "A (fc) =",amp*pow(fc,alpha)
         amp = amp / (4*dt*L)
         amp=sqrt(amp)
         i=0
@@ -288,7 +321,6 @@ class ifunc_simulator:
         spec[L/2]=0
         ts = fft.ifft(spec)
         ts=real(ts)*L
-        #plt.loglog(freq,abs(spec*spec))
         #plt.loglog(freq,(gwamp*gwamp/12.0/pi/pi/ (4*dt*L))*power(freq,alpha))
         #plt.figure()
         ts *=365.25*86400.0
@@ -300,7 +332,6 @@ class ifunc_simulator:
         #plt.ylabel("Residual (ns)")
         #plt.xlabel("time (years)")
         #plt.plot(x,(y-m)*1e9)
-        #plt.show()
 
 
 #UWL bands

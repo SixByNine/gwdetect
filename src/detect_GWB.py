@@ -138,8 +138,8 @@ def detect_GWB(A_guess,infile,path,args):
             elems=line.split()
             psr=elems[0]
             alp=float(elems[1])
-            fc=float(elems[2])
-            amp=float(elems[3])
+            amp=float(elems[2])
+            fc=float(elems[3])
             if not psr in red:
                 red[psr]=list()
             print "%s A=%g a=%g fc=%g"%(psr,amp,alp,fc)
@@ -390,7 +390,7 @@ def detect_GWB(A_guess,infile,path,args):
 
         W=eq1*eq2
         print "Weights sum =",sum(W)
-        if False:
+        if iteration==1:
             fff=open("W","w")
             i=0
             while i < len(W):
@@ -665,7 +665,7 @@ class pwr_model:
         ret=freq*0+self.white
 #        ret+=self.GWB*self.GWB*power(freq,ALPHA)/(12.0*pi*pi)
         for red in self.red:
-            ret+= red[0]/power(1.0+power(freq/red[2],2.0),red[1]/2.0)
+            ret += red[0]/power(1.0+power(freq/red[2],2.0),red[1]/2.0)
         return ret
 
 
