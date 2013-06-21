@@ -1,0 +1,17 @@
+#!/bin/bash
+
+grep -ve "^#" psd.list | while read line ; do
+set -- $line
+psr=$1
+
+if [[ $psr == "J1853+1308" ]] ; then
+f0f1=`psrcat -c 'f0 f1'  -x -o short J1853+1303`
+else
+f0f1=`psrcat -c 'f0 f1'  -x -o short $psr`
+fi
+n=`generate_timing_noise_ryan.py $f0f1`
+
+echo $psr $n
+
+done
+
