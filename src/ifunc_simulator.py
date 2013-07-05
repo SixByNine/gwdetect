@@ -59,6 +59,9 @@ class ifunc_simulator:
                 lda=array(lda)
                 rte=array(rte)
                 self.curr[psr]=dict(psd=psd,lda=lda,rte=rte)
+            elif elems[1] == "CM":
+                psd=float(elems[2]) 
+                self.curr[psr]=dict(psd=array([psd]),lda=array([0.0]),rte=array([1]))
             else:
                 psd10=float(elems[1])
                 psd20=float(elems[2])
@@ -114,7 +117,7 @@ class ifunc_simulator:
             C_DM,C_CM = self.getCMDM(vals['sma'],vals['lda'])
             vals=self.wbr[psr]
             W_DM,W_CM = self.getCMDM(vals['sma'],vals['lda'])
-            print psr,W_CM*1e6,ww,W_CM*1e6/ww,W_DM*1e6/ww
+            print psr,C_CM,C_DM
             flag=" "
             if W_CM < 30e-9:
                 flag="*"
@@ -461,6 +464,8 @@ class ifunc_simulator:
         d['sma']=array(sma)
 
     def getCMDM(self,sma, lda):
+        if lda[0]==0.0:
+            return 0,sma[0]
         LAMBDA_REF=0.2
         lR2=LAMBDA_REF*LAMBDA_REF
         l2=lda*lda
