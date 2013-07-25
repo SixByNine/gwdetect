@@ -9,10 +9,15 @@ import random
 
 
 ALPHA=-13.0/3.0
+#GW_FC=0.0335955
+GW_FC=0.005
+GW_K=power(GW_FC,ALPHA)
 
 def detect_GWB(A_guess,infile,path,args):
     A2_guess=A_guess*A_guess
+    start_a=1.0
 
+    XCOL=1
     diagPlots=False
     plotSpec=False
     saveCVM=False
@@ -24,8 +29,9 @@ def detect_GWB(A_guess,infile,path,args):
     fmax=10.0
     white_factor=1.0
     red_file=None
-    factor_file=None
     ch1f=False
+    DEBUG_W=False
+    NIT=3
     for arg in args:
         if arg=="-p":
             diagPlots=True
@@ -49,11 +55,19 @@ def detect_GWB(A_guess,infile,path,args):
             white_factor=float(arg[2:])
         if arg.startswith("-R"):
             red_file=arg[2:]
-        if arg.startswith("-f"):
-            factor_file=arg[2:]+".npy"
-        if arg.startswith("--ch1factor"):
-            ch1f=True
+        if arg.startswith("-D"):
+            DEBUG_W=True
+        if arg.startswith("-I"):
+            NIT=int(arg[2:])
+        if arg.startswith("-a"):
+            start_a=float(arg[2:])
+        if arg.startswith("-xi"):
+            XCOL=2
 
+    factors=zeros(max_channels)+1.0
+
+    #factors[0]=0.6
+    #factors[1]=0.9
 
     pairs=list()
     angles=list()
@@ -175,8 +189,8 @@ def detect_GWB(A_guess,infile,path,args):
             f=0
             while f < len(freq):
                 if writeSpec:
-                    fspecout.write("%g\n"%xspec[p][1][f])
-                fle.write("%g %g %g %g %g %g %g\n"%(freq[f],xspec[p][1][f],xspec[p][3][f],xspec[p][4][f],mp1[f],mp2[f],A2_guess*Pgn[p][f]))
+                    fspecout.write("%g\n"%xspec[p][XCOL][f])
+                fle.write("%g %g %g %g %g %g %g\n"%(freq[f],xspec[p][XCOL][f],xspec[p][3][f],xspec[p][4][f],mp1[f],mp2[f],A2_guess*Pgn[p][f]))
                 f+=1
             fle.close()
 
@@ -207,31 +221,14 @@ def detect_GWB(A_guess,infile,path,args):
 
     N=len(covar_idx)
 
-    factors=zeros(N)+1.0
-    if factor_file != None:
-        print "Loaded gain factors"
-        factors=load(factor_file)
-    if ch1f:
-        print "Gain factor 0.6 for ch1"
-        p=0
-        i=0
-        while p < np:
-            f=0
-            mx=min(len(xspec[p][0]),max_channels)
-            while f < mx:
-                if f==0:
-                    factors[i]*=0.6
-                i+=1
-                f+=1
-            p+=1
-
     p=0
     i=0
     while p < np:
         f=0
         mx=min(len(xspec[p][0]),max_channels)
         while f < mx:
-            A2ijk.append(xspec[p][1][f]/zeta[p]/Pgn[p][f]/factors[i]) 
+            factor = factors[f]
+            A2ijk.append(xspec[p][XCOL][f]/zeta[p]/Pgn[p][f]/factor) 
             i+=1
             f+=1
         p+=1
@@ -288,35 +285,33 @@ def detect_GWB(A_guess,infile,path,args):
             ij=covar_idx[a][0]
             psr1=pairs[ij][0]
             psr2=pairs[ij][1]
-            print "\r% 4d % 12s % 12s"%(a,psr1,psr2),
+            #print "\r% 4d % 12s % 12s"%(a,psr1,psr2),
             stdout.flush()
             b=0
             while b <= a:
                 lm=covar_idx[b][0]
                 psr3=pairs[lm][0]
                 psr4=pairs[lm][1]
-                f1 = xspec[ij][0][covar_idx[a][1]]
-                f2 = xspec[lm][0][covar_idx[b][1]]
+
+                if1=covar_idx[a][1]
+                if2=covar_idx[b][1]
+                factor=1.0
+                #factor = factors[if1]*factors[if2]
+
+                f1 = xspec[ij][0][if1]
+                f2 = xspec[lm][0][if2]
                 bw=max(Ts[ij][1],Ts[lm][1])
                 delta=abs(f1-f2)
-                if delta > 2*bw:
+                X=0
+                if delta < 2*bw:
+                    X=crossCovar(delta,Ts[ij][0],Ts[lm][0],bw)
+
+
+                if X < 0.01:
                     b+=1
                     continue
-#                if not (psr1==psr3 or psr1==psr4 or psr2==psr3 or psr2==psr4):
-#                    b+=1
-#                    continue
+                X=X/factor
 
-                factor=factors[ij]*factors[lm]
-                X=crossCovar(delta,Ts[ij][0],Ts[lm][0],bw)
-
-                #X=0
-                #if covar_idx[a][1]==covar_idx[b][1]:
-                #    X=1.0
-                if X < 0.1:
-                    b+=1
-                    continue
-
-#                print X,psr1,psr2,psr3,psr4,f1,f2,Ts[ij][1],Ts[lm][1]
                 
                 # noise only corrlates if at least one pulsar appears twice
                 if psr2==psr3 or psr1==psr4 or psr1==psr3 or psr2==psr4:
@@ -327,17 +322,15 @@ def detect_GWB(A_guess,infile,path,args):
                     P2 = pwr_models[ij][1].value(fa)
                     C=0
                     if psr2==psr3:
-                        C += 0.5 * (P2*A2_guess)*zeta_im/zeta_ij/zeta_lm/P_gw_nrm(fa)/factor
+                        C += 0.5 * (P2*A2_guess)*zeta_im/zeta_ij/zeta_lm/P_gw_nrm(fa)
                     if psr1==psr4:
-                        C += 0.5 * (P1*A2_guess)*zeta_jl/zeta_ij/zeta_lm/P_gw_nrm(fa)/factor
+                        C += 0.5 * (P1*A2_guess)*zeta_jl/zeta_ij/zeta_lm/P_gw_nrm(fa)
                     if psr1==psr3:
-                        C += 0.5 * (P1*A2_guess)*zeta_jm/zeta_ij/zeta_lm/P_gw_nrm(fa)/factor
+                        C += 0.5 * (P1*A2_guess)*zeta_jm/zeta_ij/zeta_lm/P_gw_nrm(fa)
                     if psr2==psr4:
-                        C += 0.5 * (P2*A2_guess)*zeta_il/zeta_ij/zeta_lm/P_gw_nrm(fa)/factor
+                        C += 0.5 * (P2*A2_guess)*zeta_il/zeta_ij/zeta_lm/P_gw_nrm(fa)
                     if ij==lm:
-                        C += 0.5 * (P1*P2)/pow(zeta[ij]*P_gw_nrm(fa),2)/factor
-                        #C += 0.5 * (P1*A2_guess)/pow(zeta[ij]*factor,2)/P_gw_nrm(fa)/factor
-                        #C += 0.5 * (P2*A2_guess)/pow(zeta[ij]*factor,2)/P_gw_nrm(fa)/factor
+                        C += 0.5 * (P1*P2)/pow(zeta[ij]*P_gw_nrm(fa),2)
                         covar_PN[a][b] += X*C
  #                       if a!=b:
  #                           covar_PN[b][a] += X*C
@@ -347,12 +340,12 @@ def detect_GWB(A_guess,infile,path,args):
 
 
 
-                C=GWcovar[ij][lm]/factor
+                C=GWcovar[ij][lm]
                 covar_GW4[a][b] += X*C
 #                if a!=b:
 #                    covar_GW4[b][a] += X*C
                 if ij==lm:
-                    C=noGWvar[ij]/factor
+                    C=noGWvar[ij]
                     covar_GN[a][b] += X*C
 #                    if a!=b:
 #                        covar_GN[b][a] += X*C
@@ -361,37 +354,45 @@ def detect_GWB(A_guess,infile,path,args):
 
         print "Done"
 
-        covar=covar_GW4 +covar_GW2 + covar_PN
-
                         
     if saveCVM != False:
         print "Save Covariance matrix"
         savez(saveCVM,GW2=covar_GW2,GW4=covar_GW4, GN=covar_GN, PN=covar_PN)
 
 
+    M=zeros(N)+1
+    covar2=covar_GN + covar_PN 
+    eq2=slalg.solve(covar2,M,sym_pos=True,check_finite=False,lower=True)
+    eq1=1.0/dot(eq2,M)
+
+    W=eq1*eq2
+
+    varA2 = sum(W*W*power(A2ijk,2))/pow(sum(W),2)
+    EZ = sqrt(varA2)
+
+
     iteration=0
-    niterations=3
-    a=1.0
+    niterations=NIT
+    a=start_a
     azero=False
     while iteration < niterations:
-        if iteration > 0:
-            print "Inverting matrix"
-            stdout.flush()
-            covar=a*a*covar_GW4 + pow(1-a,2)*covar_GN + covar_PN + a*covar_GW2
-            print "Done"
 
         iteration+=1
         print "Iteration %d, a=%.2f"%(iteration,a)
 
-        M=zeros(N)+1
+        print "Inverting matrix"
+        stdout.flush()
+        covar=a*a*covar_GW4 + pow(1-a,2)*covar_GN + covar_PN + a*covar_GW2
 
         eq2=slalg.solve(covar,M,sym_pos=True,check_finite=False,lower=True)
         eq1=1.0/dot(eq2,M)
 
         W=eq1*eq2
+        print "Done"
+
         print "Weights sum =",sum(W)
-        if iteration==1:
-            fff=open("W","w")
+        if iteration==1 and DEBUG_W == True:
+            fff=open("W.opt","w")
             i=0
             while i < len(W):
                 ij=covar_idx[i][0]
@@ -407,6 +408,8 @@ def detect_GWB(A_guess,infile,path,args):
 
         varA2 = sum(W*W*power(A2-A2ijk,2))/pow(sum(W),2)
         E = sqrt(varA2)
+        optvar=1.0/sum(eq2)
+        optE=sqrt(optvar)
 
         compute_chisq=False
         if compute_chisq:
@@ -434,7 +437,8 @@ def detect_GWB(A_guess,infile,path,args):
             print "CHISQ(A2-E)",chisq,chisq/float(len(A2ijk))
         
         newa=A2/A2_guess
-        print "A2 %.3g %.3g"%(A2,E)
+        SIGMA=A2/EZ
+        print "A2 %.3g %.3g %.3g e=%.2f o=%.2f z=%.2f"%(A2,E,optE,A2/E,A2/optE,A2/EZ)
         print "A2/A2_guess",newa
         if newa < 0 and a == 0:
             break
@@ -457,7 +461,7 @@ def detect_GWB(A_guess,infile,path,args):
     w=0
     p=0
     while p < np:
-        mx=min(max_channels,len(xspec[p][1]))
+        mx=min(max_channels,len(xspec[p][XCOL]))
         pair_W.append(zeros(mx))
         f=0
         while f < mx:
@@ -486,7 +490,7 @@ def detect_GWB(A_guess,infile,path,args):
             i=covar_ridx[p][f]
             fC[fidx]+=pair_W[p][f]
             fE[fidx]+=pair_W[p][f]*pair_W[p][f]*covar[i][i]
-            ff[fidx]+=pair_W[p][f]*xspec[p][1][f]/Pgn[p][f]/zeta[p]
+            ff[fidx]+=pair_W[p][f]*xspec[p][XCOL][f]/Pgn[p][f]/zeta[p]
             f+=1
         p+=1
 
@@ -520,8 +524,8 @@ def detect_GWB(A_guess,infile,path,args):
         if angles[p] > pi*122.0/180.0:
             a=2
 
-        pp[p]=sum(pair_W[p]*xspec[p][1][0:mx]/Pgn[p][0:mx]/zeta[p])
-        p_A[a]+=sum(pair_W[p]*xspec[p][1][0:mx]/Pgn[p][0:mx])
+        pp[p]=sum(pair_W[p]*xspec[p][XCOL][0:mx]/Pgn[p][0:mx]/zeta[p])
+        p_A[a]+=sum(pair_W[p]*xspec[p][XCOL][0:mx]/Pgn[p][0:mx])
         p_Aa[a]+=sum(pair_W[p])*angles[p]
         f=0
         while f < mx:
@@ -552,11 +556,12 @@ def detect_GWB(A_guess,infile,path,args):
 
     f.close()
 
-    print "A2=%g %g"%(A2,E)
+    print "A2=%g %g %f"%(A2,E,SIGMA)
     if A2 > 0 :
         print "A=%g %g"%(sqrt(A2),E/(2*sqrt(A2)))
-        print "sigma(A2)=%f"%(A2/E)
-        print "sigma(A)=%f"%(2*A2/E)
+        print "sigma(A2)=%.2f"%(A2/E)
+        print "sigOp(A2)=%.2f"%(A2/optE)
+        print "sigma(A)=%.2f"%(2*A2/E)
 
 
 
@@ -701,7 +706,8 @@ def closeoff(p1,p2,freq,cross_r,cross_i,power_1,power_2,power_spectra,xspec,Pgn,
 
 
 def P_gw_nrm(freq):
-    return power(freq,ALPHA)/(12.0*pi*pi)
+    return GW_K*power(1.0 + power(freq/GW_FC,2),ALPHA/2.0)/(12*pi*pi)
+    #return power(freq,ALPHA)/(12.0*pi*pi)
 
 
 def crossW(f,T):
