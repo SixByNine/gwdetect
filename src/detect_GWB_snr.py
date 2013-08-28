@@ -12,15 +12,15 @@ ALPHA=-13.0/3.0
 #GW_FC=0.0335955
 GW_FC=1.0/40.0
 GW_K=power(GW_FC,ALPHA)
+CV=0
 
 def gw_snr(A_guess,T,np,sig):
     A2_guess = A_guess*A_guess
-    NF=10
+    NF=20
     MAXPSR=np
-    N=20*T
-    sig*=1e-9
-    white=2*T*sig*sig/float(N)/pow(86400.0*365.25,2)
+    N=26*T
     f=open("angles.r")
+
 
     angles=list()
     pairs=list()
@@ -49,93 +49,126 @@ def gw_snr(A_guess,T,np,sig):
     x=(1.0-cos(angles))/2.0
     zeta=(3.0/2.0)*x*log(x) - x/4.0 + 0.5
 
-    model=pwr_model()
-    model.white=white
+    models=dict()
+    if sig=="R":
+        ff=open("GWsum.2020.cur/r.0000/GW.sum")
+        psd=dict()
+        for line in ff:
+            elems=line.split()
+            if elems[0]=="#":
+                p1=elems[1]
+                p2=elems[2]
+                w1=float(elems[4])
+                w2=float(elems[5])
+                if not p1 in psd.keys():
+                    psd[p1]=w1
+                if not p2 in psd.keys():
+                    psd[p2]=w2
+        for psr in psrs:
+            m=pwr_model()
+            m.white=psd[psr]
+            models[psr]=m
+    else:
+        sig=float(sig)*1e-9
+        white=2*T*sig*sig/float(N)/pow(86400.0*365.25,2)
+        for psr in psrs:
+            m=pwr_model()
+            m.white=white
+            models[psr]=m
 
-
-    GWcovar=zeros((np,np))
-    # compute the GW covariances
-    ij=0
-    while ij < np:
-        psr1=pairs[ij][0]
-        psr2=pairs[ij][1]
-        stdout.flush()
-        lm=0
-        while lm <= ij:
-            zeta_ij,zeta_lm,zeta_il,zeta_jm,zeta_im,zeta_jl = getZetas(ij,lm,pairs,zeta)
-            C=0.5 * pow(A_guess,4) * (zeta_il*zeta_jm + zeta_im*zeta_jl)/(zeta_ij*zeta_lm)
-            GWcovar[ij][lm]=C
-            GWcovar[lm][ij]=C
-            lm+=1
-        ij+=1
-
-
-    C = zeros((np*(NF-1),np*(NF-1)))
     fzero=1.0/T
 
-    a=0
-    f=1
-    while f < NF:
-        freq=f*fzero
-        p1=0
-        N = model.value(freq)
-        while p1 < np:
-            i=pairs[p1][0]
-            j=pairs[p1][1]
-            p2=0
-            while p2 <= p1:
-                zeta_ij,zeta_pq,zeta_ip,zeta_jq,zeta_iq,zeta_jp = getZetas(p1,p2,pairs,zeta)
-                p=pairs[p2][0]
-                q=pairs[p2][1]
-                a = (f-1)*np + p1
-                b = (f-1)*np + p2
-                C[a][b] += GWcovar[p1][p2]
-                if j==q:
-                    C[a][b] += A2_guess * zeta_iq*N/(zeta_ij*zeta_pq*P_gw_nrm(freq))
-                if i==q:
-                    C[a][b] += A2_guess * zeta_jp*N/(zeta_ij*zeta_pq*P_gw_nrm(freq))
-                if i==p:
-                    C[a][b] += A2_guess * zeta_jq*N/(zeta_ij*zeta_pq*P_gw_nrm(freq))
-                if j==q:
-                    C[a][b] += A2_guess * zeta_ip*N/(zeta_ij*zeta_pq*P_gw_nrm(freq))
-                if p1==p2:
-                    C[a][b] += 0.5 * N*N/pow(zeta_ij*P_gw_nrm(freq),2)
-                else:
-                    C[b][a] = C [a][b]
-                
-                p2+=1
-            p1+=1
-        f+=1
- 
+    if CV:
 
-    d= diagonal(C)
-    sm=0
-    p=0
-    while p < np:
+        GWcovar=zeros((np,np))
+        # compute the GW covariances
+        ij=0
+        while ij < np:
+            psr1=pairs[ij][0]
+            psr2=pairs[ij][1]
+            stdout.flush()
+            lm=0
+            while lm <= ij:
+                zeta_ij,zeta_lm,zeta_il,zeta_jm,zeta_im,zeta_jl = getZetas(ij,lm,pairs,zeta)
+                C=0.5 * pow(A_guess,4) * (zeta_il*zeta_jm + zeta_im*zeta_jl)/(zeta_ij*zeta_lm)
+                GWcovar[ij][lm]=C
+                GWcovar[lm][ij]=C
+                lm+=1
+            ij+=1
+
+
+        C = zeros((np*(NF-1),np*(NF-1)))
+
+        a=0
         f=1
         while f < NF:
             freq=f*fzero
-            P = model.value(freq) + A2_guess*P_gw_nrm(freq)
-            Vijk = 0.5 * P*P/pow(zeta[p]*P_gw_nrm(freq),2)
+            p1=0
+            while p1 < np:
+                i=pairs[p1][0]
+                j=pairs[p1][1]
+                Ni = models[i].value(freq)
+                Nj = models[j].value(freq)
+                p2=0
+                while p2 <= p1:
+                    zeta_ij,zeta_pq,zeta_ip,zeta_jq,zeta_iq,zeta_jp = getZetas(p1,p2,pairs,zeta)
+                    p=pairs[p2][0]
+                    q=pairs[p2][1]
+                    a = (f-1)*np + p1
+                    b = (f-1)*np + p2
+                    C[a][b] += GWcovar[p1][p2]
+                    if j==q:
+                        C[a][b] += A2_guess * zeta_iq*Nj/(zeta_ij*zeta_pq*P_gw_nrm(freq))
+                    if i==q:
+                        C[a][b] += A2_guess * zeta_jp*Ni/(zeta_ij*zeta_pq*P_gw_nrm(freq))
+                    if i==p:
+                        C[a][b] += A2_guess * zeta_jq*Ni/(zeta_ij*zeta_pq*P_gw_nrm(freq))
+                    if j==q:
+                        C[a][b] += A2_guess * zeta_ip*Nj/(zeta_ij*zeta_pq*P_gw_nrm(freq))
+                    if p1==p2:
+                        C[a][b] += 0.5 * Ni*Nj/pow(zeta_ij*P_gw_nrm(freq),2)
+                    else:
+                        C[b][a] = C [a][b]
+                    
+                    p2+=1
+                p1+=1
+            f+=1
+     
+
+        d= diagonal(C)
+        
+        
+
+        M=zeros(np*(NF-1))+1
+        eq2=slalg.solve(C,M,sym_pos=True,check_finite=False,lower=True)
+        eq1=1.0/dot(eq2,M)
+        var2 = 1.0/sum(eq2)
+
+
+        sn2=A2_guess/sqrt(var2)
+    else:
+        sn2=0
+    sm=0
+    p=0
+    while p < np:
+        i=pairs[p][0]
+        j=pairs[p][1]
+        f=1
+        while f < NF:
+            freq=f*fzero
+            Pi = models[i].value(freq) + A2_guess*P_gw_nrm(freq)
+            Pj = models[j].value(freq) + A2_guess*P_gw_nrm(freq)
+            Vijk = 0.5 * Pi*Pj/pow(zeta[p]*P_gw_nrm(freq),2)
             sm+=1.0 / Vijk
             f+=1
         p+=1
 
+
     var=1.0/sm
     sn=A2_guess/sqrt(var)
+    print "%g %g %g"%(A2_guess,sqrt(var),sn)
 
-    
-
-    M=zeros(np*(NF-1))+1
-    eq2=slalg.solve(C,M,sym_pos=True,check_finite=False,lower=True)
-    eq1=1.0/dot(eq2,M)
-    var2 = 1.0/sum(eq2)
-
-
-    sn2=A2_guess/sqrt(var2)
-
-
-    rms = sqrt(white * N / (2*T))*86400.0*365.25*1e9
+    rms = sqrt(models[psrs[0]].value(1e10) * N / (2*T))*86400.0*365.25*1e9
     print "%d %d %d %.1f %.2f %.2f %.2g %.2g"%(T,npsr,np,rms, sn,sn2, sqrt(var),var)
 
 
@@ -284,7 +317,7 @@ if __name__ == "__main__":
     A_guess=float(argv[1])
     T=float(argv[2])
     np=float(argv[3])
-    w=float(argv[4])
+    w=argv[4]
 
 
     gw_snr(A_guess,T,np,w)

@@ -5,15 +5,15 @@ nreal=100
 
 . ./settings
 
-gwseed=`toasim_seed.py GWB seed`
+gwseed=1234
 rm $amp.gwb
 for i in *.par ; do
    psr=`basename $i .par`
-   while [[ `jobs -r | wc -l` -ge $nthread ]] ; do
-	  n=`jobs -r | wc -l`
-	  echo "Wait ($n/$nthread) running"
-	  sleep 1
-   done
+#   while [[ `jobs -r | wc -l` -ge $nthread ]] ; do
+#	  n=`jobs -r | wc -l`
+#	  echo "Wait ($n/$nthread) running"
+#	  sleep 1
+#   done
    if grep -q $psr psr.noise ; then
 
 	  pw=`grep $psr psr.noise | awk '{print $2}'`
@@ -33,12 +33,13 @@ for i in *.par ; do
 
    tempo2-mjk -gr formIdeal -f $psr.par $psr.simulate $noflag
 
-   grep -v "^EFAC" $psr.simulate.sim > $psr.tt
-   mv $psr.tt $psr.simulate.sim
-   ef=`get_wrms.py $psr.simulate.sim -tpsd=$pw`
-   echo "FORMAT 1" > $psr.ideal
-   echo "EFAC $ef" >> $psr.ideal
-   grep -v "^FORMAT" $psr.simulate.sim >> $psr.ideal
+   #grep -v "^EFAC" $psr.simulate.sim > $psr.tt
+   #mv $psr.tt $psr.simulate.sim
+   #ef=`get_wrms.py $psr.simulate.sim -tpsd=$pw`
+   #echo "FORMAT 1" > $psr.ideal
+   #echo "EFAC $ef" >> $psr.ideal
+   #grep -v "^FORMAT" $psr.simulate.sim >> $psr.ideal
+   mv $psr.simulate.sim $psr.ideal
 
 
 
@@ -53,7 +54,7 @@ for i in *.par ; do
 
    if [[ -e $amp.gwb ]]; then
 	  echo tempo2-mjk -gr addGWB -f $psr.par $psr.ideal -nofit -dist 1 -alpha -0.6666 -gwamp $amp -ngw 2000 -nreal $nreal -npsr 1 -readGW $amp.gwb -seed $gwseed $noflag
-	  tempo2-mjk -gr addGWB -f $psr.par $psr.ideal -nofit -dist 1 -alpha -0.6666 -gwamp $amp -ngw 2000 -nreal $nreal -npsr 1 -readGW $amp.gwb -seed $gwseed $noflag > /dev/null 2>&1 &
+	  tempo2-mjk -gr addGWB -f $psr.par $psr.ideal -nofit -dist 1 -alpha -0.6666 -gwamp $amp -ngw 2000 -nreal $nreal -npsr 1 -readGW $amp.gwb -seed $gwseed $noflag
    else
 	  echo "ERROR"
 	  exit 1
@@ -67,7 +68,7 @@ for i in *.par ; do
    if grep -q $psr psr.noise ; then
 
 	  echo tempo2-mjk -gr addRedNoise -f $psr.par $psr.ideal -nofit -npsr 1 -seed $seed -Pyr3 $pyr3 -fc $fc -a -$a -nreal $nreal
-	  tempo2-mjk -gr addRedNoise -f $psr.par $psr.ideal -nofit -npsr 1 -seed $seed -Pyr3 $pyr3 -fc $fc -a -$a -nreal $nreal $noflag > /dev/null 2>&1  &
+	  tempo2-mjk -gr addRedNoise -f $psr.par $psr.ideal -nofit -npsr 1 -seed $seed -Pyr3 $pyr3 -fc $fc -a -$a -nreal $nreal $noflag 
    fi
 done
 

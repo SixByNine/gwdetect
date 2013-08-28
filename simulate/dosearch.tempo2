@@ -19,8 +19,7 @@ fi
 
 for trial in `seq $start $end` ; do
    cd $wd
-
-
+   
    while [[ `jobs -r | wc -l` -ge $nthread ]] ; do
 	  n=`jobs -r | wc -l`
 	  echo -ne "\rReal $trial - wait ($n/$nthread) running" `date +%T` `cat /proc/loadavg` "   "
@@ -31,10 +30,14 @@ for trial in `seq $start $end` ; do
 	  exit
    fi
    cd real.$trial
+   if [[ ! -e mjk.model ]] ; then
+	  ln -s ../*.model .
+   fi
+
+
    echo -n "tempo2-mjk -gr detectGWBnew " > cmd
    cat many >> cmd
-   echo " -nofit -dcf tempo2.model -dt $dt  -t1 $t1 -t2 $t2 -gwamp $amp -fast -py" >> cmd
-
+   echo " -nofit -dcf mjk.model -dt $dt  -t1 $t1 -t2 $t2 -gwamp $amp -fast -py" >> cmd
 
    echo -e "\r" `head -c 80 cmd`"..."
    /usr/bin/time sh cmd > cmd.log 2>&1 &

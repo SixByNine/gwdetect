@@ -1,8 +1,12 @@
-#!/usr/bin/python
+#! /usr/bin/python
+import gc
 import argparse
 from sys import stdout
+import os
 from math import pi, sqrt, floor
-from numpy import zeros, array, power,dot, linspace, log,cos,sin,diag,diagonal,eye
+from numpy import zeros, array, power,dot, linspace, log,cos,sin,diag,diagonal,eye,argmin,argmax, abs, amin,amax, transpose,mean,var
+import numpy
+from scipy import sparse
 #from numpy import linalg as lalg
 from scipy import linalg as lalg
 from matplotlib import pyplot as plt
@@ -25,36 +29,107 @@ class GravWavBkgrdDetect:
         self.path="."
         self.cinvs=None
         self.start_channel=0
+        self.skipped_pairs = list()
+        self.QUICK=False
         
 
     
     def getA2(self,ai):
         M=zeros(self.N)+1.0
-        CM = dot(self.cinvs[ai],M)
-        MCM = dot(M,CM)
-        self.Wijk = (1.0/MCM) * CM
+        
+        self.Wijk = self.Ww[ai]
         
         
         self.A2 = dot(self.Wijk,self.A2ijk)
         self.varA2 = sum(self.Wijk*self.Wijk*power(self.A2ijk,2))/pow(sum(self.Wijk),2)
-        self.R = self.A2ijk - self.A2
-        self.chisq = dot(dot(self.R,self.cinvs[ai]),self.R) / (self.N-1)
-        return self.A2,self.varA2, self.chisq
+        
+        if self.QUICK:
+            self.chisq=1
+            self.chisq2=2
+        else:
+            self.R = self.A2ijk - self.A2
+
+            C=self.cinvs[ai]
+            
+            self.chisq = dot(dot(self.R.T,C),self.R) / (self.N-1)
+            
+            R2 = self.A2ijk - self.A2_guess
+            
+            self.chisq2 = dot(dot(R2.T,self.cinvs[ai]),R2) / (self.N-1)
+        
+        return self.A2,self.varA2, self.chisq, self.chisq2
     
+    def clear_big_matricies(self):
+        self.uinvs=None
+        self.cinvs=None
+        return
+    
+    def get_whitened_residuals(self,ai):
+        white_res = dot(self.uinvs[ai].T,self.R)
+        return white_res
+    
+    
+    def form_Uinvs(self):
+        self.uinvs=list()
+        for a in self.little_as:
+            n=1-a
+            covar = self.covar_k \
+                  + self.covar_aa * a * a  \
+                  + self.covar_a  * a      \
+                  + self.covar_n  * n      \
+                  + self.covar_nn * n * n  \
+                  + self.covar_an * a * n
+            covar_full = covar + covar.T - diag(covar.diagonal())
+    
+            U = lalg.cholesky(covar_full)
+            Uinv = lalg.inv(U)
+            self.uinvs.append(Uinv)
+        return
+    
+    def clear_covar(self):
+        self.covar_k=None
+        self.covar_aa=None
+        self.covar_a=None
+        self.covar_n=None
+        self.covar_nn=None
+        self.covar_an=None
+        gc.collect()
+
     def form_Cinvs(self):
         self.cinvs=list()
         self.Ww = list()
+        self.theory_var = list()
+        self.eq1 = list()
         for a in self.little_as:
-            covar=a*a*self.covar_GW4 + (1-a*a)*self.covar_GN + self.covar_PN + a*self.covar_GW2
-            Cinv = lalg.solve(covar,eye(self.N),sym_pos=True,check_finite=False,lower=True)
-            ### TODO: Check that this is the same as inverting after filling in the upper triangle!!! TODO
-            #self.cinvs.append(lalg.inv(covar))
-            self.cinvs.append(Cinv)
+            print a
+            gc.collect()
+            n=1-a
+            covar = self.covar_k \
+                  + self.covar_aa * a * a  \
+                  + self.covar_a  * a      \
+                  + self.covar_n  * n      \
+                  + self.covar_nn * n * n  \
+                  + self.covar_an * a * n
+                  
             M=zeros(self.N)+1
+            if self.QUICK:
+                eq2= lalg.solve(covar,M,sym_pos=True,check_finite=False,lower=True,overwrite_a=True,overwrite_b=True)
+            else:
+                Cinv = lalg.solve(covar,eye(self.N),sym_pos=True,check_finite=False,lower=True,overwrite_a=True, overwrite_b=True)
+                eq2=dot(Cinv,M)
+                self.cinvs.append(Cinv)
+            ### TODO: Check that this is the same as inverting after filling in the upper triangle!!! TODO
+
             
-            eq2=lalg.solve(covar,M,sym_pos=True,check_finite=False,lower=True)
-            eq1=1.0/dot(eq2,M)
+            M=zeros(self.N)+1
+            eq1=1.0/dot(M,eq2)
             self.Ww.append(eq1*eq2)
+            self.eq1.append(eq1)
+            self.theory_var.append(sqrt(1.0/sum(eq2)))
+
+            # Encourage garbage collection
+            Cinv=None
+            covar=None
     
     def get_Aijks(self):
         A2ijk=list()
@@ -133,13 +208,14 @@ class GravWavBkgrdDetect:
         zeta=self.zeta
         
         
-        covar_GW2 = zeros((N, N))
-        covar_GW4 = zeros((N, N))
-        covar_PN = zeros((N, N))
-        covar_GN = zeros((N, N))
+        covar_a = zeros((N, N))
+        covar_aa = zeros((N, N))
+        covar_k = zeros((N, N))
+        covar_nn = zeros((N, N))
+        covar_an = zeros((N, N))
+        covar_n = zeros((N, N))
         print "Compute GW covariances"
         GWcovar = zeros((np, np))
-        noGWvar = zeros(np)
     # compute the GW covariances
         ij = 0
         while ij < np:
@@ -151,11 +227,12 @@ class GravWavBkgrdDetect:
             while lm <= ij: #psr3=pairs[lm][0]
         #psr4=pairs[lm][1]
                 zeta_ij, zeta_lm, zeta_il, zeta_jm, zeta_im, zeta_jl = self.getZetas(ij, lm, pairs, zeta)
-                C = 0.5 * pow(self.A_guess, 4) * (zeta_il * zeta_jm + zeta_im * zeta_jl) / (zeta_ij * zeta_lm) #print "%s %s %s %s %.4f %.4f %.4f %.4f %.4f %.4f %g"%(psr1,psr2,psr3,psr4,zeta_ij,zeta_lm,zeta_il,zeta_jm,zeta_im,zeta_jl,C)
+                #C = 0.5 * pow(self.A_guess, 4) * (zeta_il * zeta_jm + zeta_im * zeta_jl) / (zeta_ij * zeta_lm)
+                C = 0.5 * pow(self.A_guess, 4) * (zeta_il * zeta_jm + zeta_im * zeta_jl) / (zeta_ij * zeta_lm)
+
+                #print "%s %s %s %s %.4f %.4f %.4f %.4f %.4f %.4f %g"%(psr1,psr2,psr3,psr4,zeta_ij,zeta_lm,zeta_il,zeta_jm,zeta_im,zeta_jl,C)
                 GWcovar[ij][lm] = C
                 GWcovar[lm][ij] = C
-                if ij == lm:
-                    noGWvar[ij] = 0.5 * pow(self.A_guess, 4) / (zeta_ij * zeta_lm)
                 lm += 1
             
             ij += 1
@@ -195,36 +272,49 @@ class GravWavBkgrdDetect:
                     P1 = self.pwr_models[ij][0].value(fa)
                     P2 = self.pwr_models[ij][1].value(fa)
                     C = 0
+                    D = 0
                     if psr2 == psr3:
                         C += 0.5 * (P2 * self.A2_guess) * zeta_im / zeta_ij / zeta_lm / self.P_gw_nrm(fa)
+                        D += 0.5 * (self.A2_guess * self.A2_guess) * zeta_im / zeta_ij / zeta_lm
                     if psr1 == psr4:
                         C += 0.5 * (P1 * self.A2_guess) * zeta_jl / zeta_ij / zeta_lm / self.P_gw_nrm(fa)
+                        D += 0.5 * (self.A2_guess * self.A2_guess) * zeta_jl / zeta_ij / zeta_lm
                     if psr1 == psr3:
                         C += 0.5 * (P1 * self.A2_guess) * zeta_jm / zeta_ij / zeta_lm / self.P_gw_nrm(fa)
+                        D += 0.5 * (self.A2_guess * self.A2_guess) * zeta_jm / zeta_ij / zeta_lm
                     if psr2 == psr4:
                         C += 0.5 * (P2 * self.A2_guess) * zeta_il / zeta_ij / zeta_lm / self.P_gw_nrm(fa)
-
-
+                        D += 0.5 * (self.A2_guess * self.A2_guess) * zeta_il / zeta_ij / zeta_lm
+                    
+                    covar_an[a][b] += X * D
+                    covar_a[a][b] += X * C
                     if ij == lm:
-                        C += 0.5 * (P1 * P2) / pow(zeta[ij] * self.P_gw_nrm(fa), 2)
-                        covar_PN[a][b] += X * C
-                    else:
-                        covar_GW2[a][b] += X * C
+                        G = 0.5 * (P1 * P2) / pow(zeta[ij] * self.P_gw_nrm(fa), 2)
+                        F = 2 * 0.5 * (P1 * self.A2_guess) / pow(zeta[ij],2) / self.P_gw_nrm(fa)
+                        E = 0.5 * (self.A2_guess * self.A2_guess) / pow(zeta[ij],2)
+                        covar_k[a][b] += X * G
+                        covar_n[a][b] += X * F
+                        covar_nn[a][b] += X * E
+                        
+                    
+                        
                 C = GWcovar[ij][lm]
-                covar_GW4[a][b] += X * C
-                if ij == lm:
-                    C = noGWvar[ij]
-                    covar_GN[a][b] += X * C
+                covar_aa[a][b] += X * C
                 b += 1
             
             a += 1
         
         print "Done"
-        self.covar_GN = covar_GN
-        self.covar_GW2 = covar_GW2
-        self.covar_GW4 = covar_GW4
-        self.covar_PN = covar_PN
-    
+        
+
+        
+        self.covar_aa = covar_aa
+        self.covar_a = covar_a
+        self.covar_nn = covar_nn
+        self.covar_n = covar_n
+        self.covar_an = covar_an
+        self.covar_k = covar_k
+        
     def getZetas(self,p1, p2, pairs,zetas):
         key="%d %d"%(p1,p2)
         if key not in self.zeta_lookup:
@@ -318,6 +408,13 @@ class GravWavBkgrdDetect:
     
 
     def read_xspec(self,infile):
+        self.pairs=None
+        self.xspec=None
+        self.Pgn=None
+        self.angles=None
+        self.zeta=None
+        gc.collect()
+
         pairs = list()
         angles = list()
         power_spectra = dict()
@@ -338,12 +435,14 @@ class GravWavBkgrdDetect:
                 if ii > 0:
                     self.closeoff(p1, p2, freq, cross_r, cross_i, power_1, power_2, power_spectra, xspec, Pgn, Ts)
                 elif p1:
-                    print "Skip", p1, p2, "No Freq"
+                    pr="%s-%s"%(p1,p2)
+                    if pr not in self.skipped_pairs:
+                        print "Skip", pr
+                        self.skipped_pairs.append(pr)
                 # now set up for the new pulsar.
                 p1 = elems[1]
                 p2 = elems[2]
                 if p1 in self.skipem or p2 in self.skipem:
-                    print "Skip", p1, p2
                     skip = True
                     ii = 0
                     continue
@@ -538,7 +637,7 @@ class pwr_model:
     def __init__(self):
         self.white=1e-30
 #        self.GWB=1e-15
-        self.red=[(1e-30,-4)]
+        self.red=[]
 
     def value(self,freq):
         ret=freq*0+self.white
@@ -548,48 +647,236 @@ class pwr_model:
         return ret
 
 
+        #return self.GW_K*power(1.0 + power(freq/self.GW_FC,2),self.ALPHA/2.0)/(12*pi*pi)
 
+
+def get_stats(detector):
+    Na=len(detector.little_as)
+    chisq=zeros(Na)
+    chisq2 = zeros(Na)
+    A2=zeros(Na)
+    varA2=zeros(Na)
+    white_rms=zeros(Na)
+    
+    
+    zeroA2 = -1
+    oneA2 = -1
+    halfA2 = -1
+    ai=0
+    for a in detector.little_as:
+        tA2,tvarA2,tchisq,tchisq2 = detector.getA2(ai)
+        #white_res = detector.get_whitened_residuals(ai)
+        chisq[ai] = tchisq
+        chisq2[ai] = tchisq2
+        A2[ai] = tA2
+        varA2[ai] = tvarA2
+        #white_rms[ai]=sqrt(var(white_res))
+        if a == 0.0:
+            zeroA2 = tA2
+        if a == 1.0:
+            oneA2 = tA2
+        if a == 0.5:
+            halfA2 = tA2
+
+        ai+=1
+    best_chi_a = detector.little_as[argmin(chisq)]
+    best_chi = amin(chisq)
+    best_chi_A2 = A2[argmin(chisq)]
+    best_chi2_a = detector.little_as[argmin(chisq2)]
+    
+    adaptive1_a = zeroA2 / detector.A2_guess
+    adaptive1_ai = (abs(detector.little_as-adaptive1_a)).argmin()
+    adaptive1_A2 = A2[adaptive1_ai]
+    
+    
+    ret= [zeroA2, halfA2, oneA2, adaptive1_A2, best_chi_a, best_chi,best_chi2_a, best_chi_A2]
+    ret.extend(chisq)
+    return ret
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description='Detect the GWB.')
     parser.add_argument('-A','--gwamp',type=float,default=1e-15)
     parser.add_argument('-R','--redfile',default=None)
-    parser.add_argument('-w','--white_factor',default=1.0)
+    parser.add_argument('-w','--white_factor',type=float,default=1.0)
     parser.add_argument('-n','--maxchans',type=int,default=10)
+    parser.add_argument('-Z','--zerodir',default=None)
+    parser.add_argument('-k','--skipfile',default=None)
+    parser.add_argument('-d','--outdir',default=".")
+    parser.add_argument('-Q','--quick',default=False, action='store_true')
+    parser.add_argument('--test',default=False, action='store_true')
 
     parser.add_argument('dirs',nargs="+")
 
     args=parser.parse_args()
 
+    try:
+        os.mkdir(args.outdir)
+    except OSError as err:
+        pass
+    try:
+        test=open("%s/onstats"%args.outdir,"w")
+        test.close()
+        test=open("%s/offstats"%args.outdir,"w")
+        test.close()
+    except OSError as err:
+        print err
+        exit(1)
+
     detector = GravWavBkgrdDetect(args.gwamp)
+    detector.QUICK=args.quick
+    if detector.QUICK:
+        print "QUICK MODE - NO chisq computaiton possible"
+
+    if args.skipfile != None:
+        f = open (args.skipfile)
+        for line in f:
+            e=line.split()
+            detector.skipem.append(e[0])
+
     detector.max_channels = args.maxchans
+    if args.test:
+        print "*** TEST MODE ***"
+    
+    ii=0
+    onstats=None
+    offstats=None
     #detector.little_as=[0.0]
     for d in args.dirs:
         infile=d+"/GW.sum"
-        print "Processing '%s'"%(infile)
+        print "Processing '%s'                \r"%(infile),
+        stdout.flush()
         detector.read_xspec(infile)
 
         if detector.cinvs==None:
+            npsr=1
+            np=0
+            while np < detector.np:
+                npsr+=1
+                np=npsr*(npsr-1)/2
+            if np != detector.np:
+                print "Error: number of pairs is not valid"
+                exit(1)
+            else:
+                print "Npsr = %d, Npair = %d"%(npsr,np)
+
+            Ncov = np*detector.max_channels
+            Cmem1 = Ncov*Ncov*8.0/pow(2,20) # 4 byte floats
+            print "Mem per matrix %.1f MB"%Cmem1
+            Nmatrix = len(detector.little_as)+6
+            print "Tot Mem = %.1f MB"%(Cmem1*Nmatrix)
+
             detector.model_noise(args.redfile, args.white_factor)
             print "Compute covar"
             detector.compute_covaraince_matrix()
+            
+            
+            ##### BEGIN TEST
+            if args.test:
+                detector.form_Cinvs()
+                detector.get_Aijks()
+                detector.getA2(10)
+                detector.form_Uinvs()
+                white_res = detector.get_whitened_residuals(10)
+                print mean(white_res),sqrt(var(white_res))
+                plt.plot(white_res)
+                
+                plt.figure()
+                detector.getA2(5)
+                white_res = detector.get_whitened_residuals(5)
+                print mean(white_res),sqrt(var(white_res))
+                plt.plot(white_res)
+                
+                plt.figure()
+                detector.getA2(0)
+                white_res = detector.get_whitened_residuals(0)
+                print mean(white_res),sqrt(var(white_res))
+                plt.plot(white_res)
+                
+                
+                
+                infile=args.zerodir+d+"/GW.sum"
+                detector.read_xspec(infile)
+                detector.get_Aijks()
+                detector.getA2(0)
+                plt.figure()
+                white_res = detector.get_whitened_residuals(0)
+                print mean(white_res),sqrt(var(white_res))
+                plt.plot(white_res)
+                
+                plt.show()
+                
+                exit(1)
+            
+            
+            
+            ##### END TEST
+            
             print "Compute cinvs"
             detector.form_Cinvs()
-
+            
+            #print "Compute Uinvs"
+            #detector.form_Uinvs()
+            detector.clear_covar()
+            
+            ai=0
+            for a in detector.little_as:
+                print "%0.2f  %.3g"%(a,detector.theory_var[ai])
+                ai+=1
 
         detector.get_Aijks()
-        ai=0
-        for a in detector.little_as:
-            A2,varA2,chisq = detector.getA2(ai)
+
+        ss = get_stats(detector)
+        if onstats==None:
+            onstats = zeros((len(ss),len(args.dirs)))
+        si=0
+        for s in ss:
+            onstats[si][ii] = s
+            si+=1
+                
+        if args.zerodir != None:
+            infile=args.zerodir+d+"/GW.sum"
+            print "Processing '%s/GW.sum' [ZERO]            \r"%(d),
+            stdout.flush()
+            detector.read_xspec(infile)
+            detector.get_Aijks()
+
+            ss = get_stats(detector)
+            if offstats==None:
+                offstats = zeros((len(ss),len(args.dirs)))
+            si=0
+            for s in ss:
+                offstats[si][ii] = s
+                si+=1
+        ii+=1
             
-            print a, A2, varA2, chisq
-            ai+=1
+    if onstats != None:
+        f = open("%s/onstats"%args.outdir,"w")
+        for itr in transpose(onstats):
+            for s in itr:
+                f.write("%g "%s)
+            f.write("\n")
+
+        f.close()
+        
+    
+    if offstats != None:
+        f = open("%s/offstats"%args.outdir,"w")
+        for itr in transpose(offstats):
+            for s in itr:
+                f.write("%g "%s)
+            f.write("\n")
+
+        f.close()
+        
+        
+        
+    print "0", detector.little_as[0], mean(offstats[0]),sqrt(var(offstats[0])), detector.theory_var[0], sqrt(var(offstats[0]))/detector.theory_var[0]
+    
+    print "1", detector.little_as[0], mean(onstats[0]),sqrt(var(onstats[0])), detector.theory_var[0], sqrt(var(onstats[0]))/detector.theory_var[0]
+
+    print "1", detector.little_as[5],mean(onstats[1]),sqrt(var(onstats[1])), detector.theory_var[5], sqrt(var(onstats[1]))/detector.theory_var[5]
+    
+    print "1", detector.little_as[10],mean(onstats[2]),sqrt(var(onstats[2])), detector.theory_var[10], sqrt(var(onstats[2]))/detector.theory_var[10]
 
 
-
-
-
-
-
-
-
+    print mean(onstats[4]), mean(offstats[4])

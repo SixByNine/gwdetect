@@ -25,6 +25,9 @@ class ifunc_simulator:
             noop=True
         if "-nogw" in args:
             Agwb=0
+        if "-A=2" in args:
+            Agwb=2e-15
+
  
         print "Nreal=",Nreal
         self.xtra=list()
@@ -39,6 +42,9 @@ class ifunc_simulator:
         self.curr = dict()
         self.red = dict()
         self.tsamp = 60.0
+
+        if "-14" in args:
+            self.tsamp=14.0
         for line in f:
             if line.startswith("#"):
                 continue
@@ -158,7 +164,7 @@ class ifunc_simulator:
         N=Ncur+Nwbr
         print N
         data=zeros((npsr,N*Nreal))
-        print "Make GW signal"
+        print "Make GW signal ",Agwb
         i=0
         for psr in self.psrs:
             print psr

@@ -34,33 +34,7 @@ done
 
 wait
 
+cp ../*.model .
 
-if [[ -e ../tempo2.model ]] ;then
-   cp ../*.model .
-else
-
-   for i in *.par ; do
-	  psr=`basename $i .par`
-	  rms=`/u/kei041/bin/get_wrms.py $psr.tim`
-	  nobs=`wc -l $psr.tim | awk '{print $1+1000}'`
-	  tempo2-mjk -gr analyticChol -gwamp $amp -f $psr.par $psr.tim -rms $rms -npsr 1 -nobs $nobs > /dev/null &
-   done
-
-   echo "wait for analyticChol"
-   wait
-
-   echo "MODEL T2" > tempo2.model
-   for i in J*.model ; do
-	  psr=`basename $i .model`
-	  echo "PSR $psr" >> tempo2.model
-	  echo "INCLUDE $i" >> tempo2.model
-	  if grep -q $psr ../psr.noise ; then
-		 set -- `grep $psr ../psr.noise`
-		 if [[ $3 != '0' ]] ; then
-			echo "MODEL T2PowerLaw $4 $3 $5" >> tempo2.model
-		 fi
-	  fi
-   done
-   cp *.model ..
-fi
+exit
 
