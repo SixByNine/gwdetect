@@ -53,6 +53,11 @@ f.close()
 
 
 A2_guess=A*A
+for f,v,e in zip(freqs,avg,avgE):
+    if abs(v-A2_guess)/e > 4:
+        print f,v,e,"BAD",(v-A2_guess)/e
+
+
 errorbar(freqs,avg,avgE,fmt='x',color='red')
 plot(freqs,freqs*0+A2_guess,color='red')
 plot(freqs,freqs*0,color='black')

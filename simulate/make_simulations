@@ -6,7 +6,7 @@ nreal=100
 . ./settings
 
 gwseed=1234
-rm $amp.gwb
+#rm $amp.gwb
 for i in *.par ; do
    psr=`basename $i .par`
 #   while [[ `jobs -r | wc -l` -ge $nthread ]] ; do
@@ -28,10 +28,9 @@ for i in *.par ; do
    fi
 
    nobs=`wc $psr.simulate`
-	noflag="-nobs $nobs -npsr 1"
+   noflag="-nobs $nobs -npsr 1"
 
-
-   tempo2-mjk -gr formIdeal -f $psr.par $psr.simulate $noflag
+   tempo2-mjk -gr formIdeal -f $psr.par $psr.ideal $noflag
 
    #grep -v "^EFAC" $psr.simulate.sim > $psr.tt
    #mv $psr.tt $psr.simulate.sim
@@ -39,7 +38,7 @@ for i in *.par ; do
    #echo "FORMAT 1" > $psr.ideal
    #echo "EFAC $ef" >> $psr.ideal
    #grep -v "^FORMAT" $psr.simulate.sim >> $psr.ideal
-   mv $psr.simulate.sim $psr.ideal
+   mv $psr.ideal.sim $psr.ideal
 
 
 

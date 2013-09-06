@@ -3,8 +3,8 @@ import gc
 import argparse
 from sys import stdout
 import os
-from math import pi, sqrt, floor
-from numpy import zeros, array, power,dot, linspace, log,cos,sin,diag,diagonal,eye,argmin,argmax, abs, amin,amax, transpose,mean,var
+from math import pi,  floor
+from numpy import zeros, array, power,dot, linspace, log,cos,sin,diag,diagonal,eye,argmin,argmax, abs, amin,amax, transpose,mean,var,sqrt
 import numpy
 from scipy import sparse
 #from numpy import linalg as lalg
@@ -26,19 +26,59 @@ class GravWavBkgrdDetect:
         self.little_as=[0.0,0.1,0.2,0.3,0.4,0.5,0.6,0.7,0.8,0.9,1.0]
         self.skipem=list()
         self.fmax = 1000.0
-        self.path="."
         self.cinvs=None
         self.start_channel=0
         self.skipped_pairs = list()
         self.QUICK=False
-        
-
+        self.Nadd=0
+        self.corn=None
+    
+    def add_spec(self):
+        if self.Nadd==0:
+            # Initialise the arrays
+            N=0
+            ip=0
+            for p in self.pairs:
+                N+=len(self.xspec[ip][0])*2
+            self.avg_spec = zeros(N)
+            self.model_spec = zeros(N)
+            ip=0
+            i=0
+            for p in self.pairs:
+                for m in self.pwr_models[ip]:
+                    for freq in self.xspec[ip][0]:
+                        G=self.A2_guess * self.P_gw_nrm(freq)
+                        P= m.value(freq)
+                        self.model_spec[i] += P+G
+                        i+=1
+        ip=0
+        i=0
+        for p in self.pairs:
+            for idx in [3,4]:
+                for v in self.xspec[ip][idx]:
+                    self.avg_spec[i] += v
+                    i+=1
+            
+        self.Nadd+=1
+    
+    def write_avspec(self,outpath="."):
+        f=open("%s/avspec"%outpath,"w")
+        N=float(self.Nadd)
+        for i in range(len(self.avg_spec)):
+            v=self.avg_spec[i]
+            m=self.model_spec[i]
+            f.write("%g %g\n"%(v/N,m))
+        f.close()
     
     def getA2(self,ai):
         M=zeros(self.N)+1.0
         
         self.Wijk = self.Ww[ai]
         
+        if len(self.Wijk) != len(self.A2ijk):
+            print ""
+            print "ai=%d len(wijk)=%d len(a2ijk)=%d"%(ai,len(self.Wijk),len(self.A2ijk))
+            print "ERROR"
         
         self.A2 = dot(self.Wijk,self.A2ijk)
         self.varA2 = sum(self.Wijk*self.Wijk*power(self.A2ijk,2))/pow(sum(self.Wijk),2)
@@ -100,6 +140,7 @@ class GravWavBkgrdDetect:
         self.Ww = list()
         self.theory_var = list()
         self.eq1 = list()
+        self.covarDiag=list()
         for a in self.little_as:
             print a
             gc.collect()
@@ -111,6 +152,7 @@ class GravWavBkgrdDetect:
                   + self.covar_nn * n * n  \
                   + self.covar_an * a * n
                   
+            self.covarDiag.append(covar.diagonal())
             M=zeros(self.N)+1
             if self.QUICK:
                 eq2= lalg.solve(covar,M,sym_pos=True,check_finite=False,lower=True,overwrite_a=True,overwrite_b=True)
@@ -132,6 +174,8 @@ class GravWavBkgrdDetect:
             covar=None
     
     def get_Aijks(self):
+        if self.corn != None:
+            self.correct_xspec()
         A2ijk=list()
         p=0
         i=0
@@ -142,11 +186,31 @@ class GravWavBkgrdDetect:
                 A2ijk.append(self.xspec[p][self.XCOL][f]/self.zeta[p]/self.Pgn[p][f]/self.factors[f]) 
                 i+=1
                 f+=1
+                
             p+=1
     
-        self.A2ijk=array(A2ijk)
 
-    
+        self.A2ijk=array(A2ijk)
+        
+        
+    def correct_xspec(self):
+        if self.xspec_corrected:
+            return
+        i=0
+        ip=0
+        for p in self.pairs:
+            nf=len(self.xspec[ip][0])
+            for ii in range(nf):
+                F=self.corn[i]*self.corn[i+nf]
+                self.xspec[ip][1][ii] *= F
+                self.xspec[ip][2][ii] *= F
+                self.xspec[ip][3][ii] *= self.corn[i]
+                self.xspec[ip][4][ii] *= self.corn[i+nf]
+                i+=1
+            i+=nf
+            ip+=1
+        self.xspec_corrected=True
+        
     def model_noise(self,red_file=None,white_factor=1.0):
         red=dict()
         if red_file != None:
@@ -314,6 +378,7 @@ class GravWavBkgrdDetect:
         self.covar_n = covar_n
         self.covar_an = covar_an
         self.covar_k = covar_k
+        self.covar_ridx = covar_ridx
         
     def getZetas(self,p1, p2, pairs,zetas):
         key="%d %d"%(p1,p2)
@@ -408,6 +473,7 @@ class GravWavBkgrdDetect:
     
 
     def read_xspec(self,infile):
+        self.xspec_corrected=False
         self.pairs=None
         self.xspec=None
         self.Pgn=None
@@ -427,58 +493,66 @@ class GravWavBkgrdDetect:
         p1 = False
         p2=freq=cross_r=cross_i=power_1=power_2=None
         ii = 0
+        root=os.path.dirname(infile)+"/"
         inf = open(infile)
-        for line in inf:
-            elems = line.split()
-            if line.startswith("#"):
-                skip = False
-                if ii > 0:
-                    self.closeoff(p1, p2, freq, cross_r, cross_i, power_1, power_2, power_spectra, xspec, Pgn, Ts)
-                elif p1:
-                    pr="%s-%s"%(p1,p2)
-                    if pr not in self.skipped_pairs:
-                        print "Skip", pr
-                        self.skipped_pairs.append(pr)
-                # now set up for the new pulsar.
-                p1 = elems[1]
-                p2 = elems[2]
-                if p1 in self.skipem or p2 in self.skipem:
-                    skip = True
+        for aline in inf:
+            data=[aline]
+            if aline.startswith("I"):
+                elems = aline.split()
+                FF=open(root+elems[1])
+                data=FF.readlines()
+                FF.close()
+            for line in data:
+                elems=line.split()
+                if line.startswith("#"):
+                    skip = False
+                    if ii > 0:
+                        self.closeoff(p1, p2, freq, cross_r, cross_i, power_1, power_2, power_spectra, xspec, Pgn, Ts)
+                    elif p1:
+                        pr="%s-%s"%(p1,p2)
+                        if pr not in self.skipped_pairs:
+                            print "Skip", pr
+                            self.skipped_pairs.append(pr)
+                    # now set up for the new pulsar.
+                    p1 = elems[1]
+                    p2 = elems[2]
+                    if p1 in self.skipem or p2 in self.skipem:
+                        skip = True
+                        ii = 0
+                        continue
+                    a = pi * float(elems[3]) / 180.0
+                    pw1 = float(elems[4])
+                    pw2 = float(elems[5])
+                    freq = list()
+                    cross_r = list()
+                    cross_i = list()
+                    power_1 = list()
+                    power_2 = list()
                     ii = 0
+                    iii = 0
                     continue
-                a = pi * float(elems[3]) / 180.0
-                pw1 = float(elems[4])
-                pw2 = float(elems[5])
-                freq = list()
-                cross_r = list()
-                cross_i = list()
-                power_1 = list()
-                power_2 = list()
-                ii = 0
-                iii = 0
-                continue
-            if skip:
-                continue
-            if ii >= self.max_channels:
-                continue
-            if iii < self.start_channel:
-                iii += 1
-                continue
-            fff = float(elems[0])
-            if fff > self.fmax:
-                continue
-            if ii == 0:
-                pairs.append((p1, p2))
-                angles.append(a)
-                white.append((pw1, pw2))
-            elems = line.split()
-            freq.append(fff)
-            cross_r.append(float(elems[1]))
-            cross_i.append(float(elems[2]))
-            power_1.append(float(elems[3]))
-            power_2.append(float(elems[4]))
-            ii += 1
-        
+                if skip:
+                    continue
+                if ii >= self.max_channels:
+                    continue
+                if iii < self.start_channel:
+                    iii += 1
+                    continue
+                fff = float(elems[0])
+                if fff > self.fmax:
+                    continue
+                if ii == 0:
+                    pairs.append((p1, p2))
+                    angles.append(a)
+                    white.append((pw1, pw2))
+                elems = line.split()
+                freq.append(fff)
+                cross_r.append(float(elems[1]))
+                cross_i.append(float(elems[2]))
+                power_1.append(float(elems[3]))
+                power_2.append(float(elems[4]))
+                ii += 1
+            
         self.closeoff(p1, p2, freq, cross_r, cross_i, power_1, power_2, power_spectra, xspec, Pgn, Ts)
         angles = array(angles)
         self.np = len(pairs)
@@ -493,12 +567,11 @@ class GravWavBkgrdDetect:
         self.zeta=(3.0/2.0)*x*log(x) - x/4.0 + 0.5
         return
 
-    def write_plotfiles(self, covar, A2, a, W):
-        covar=a*a*self.covar_GW4 + pow(1-a,2)*self.covar_GN + self.covar_PN + a*self.covar_GW2
-
+    def write_plotfiles(self, outpath, ia):
         np=self.np
         zeta=self.zeta
         pairs=self.pairs
+        W = self.Ww[ia]
         pair_W = list()        
         all_freq = list()
         w=0
@@ -532,7 +605,7 @@ class GravWavBkgrdDetect:
                 fidx= all_freq.index(fff)
                 i=self.covar_ridx[p][f]
                 fC[fidx]+=pair_W[p][f]
-                fE[fidx]+=pair_W[p][f]*pair_W[p][f]*covar[i][i]
+                fE[fidx]+=pair_W[p][f]*pair_W[p][f]*self.covarDiag[ia][i]
                 ff[fidx]+=pair_W[p][f]*self.xspec[p][self.XCOL][f]/self.Pgn[p][f]/zeta[p]
                 f+=1
             p+=1
@@ -541,7 +614,7 @@ class GravWavBkgrdDetect:
         fE /= fC*fC
         fE = sqrt(fE)
     
-        fle=open("%s/ff.plot"%self.path,"w")
+        fle=open("%s/ff.plot"%outpath,"w")
         f=0
         while f < nf:
             fle.write("%g\t%g\t%g\t%g\n"%(float(all_freq[f])/100.0,ff[f],fE[f],fC[f]))
@@ -573,8 +646,8 @@ class GravWavBkgrdDetect:
             f=0
             while f < mx:
                 i=self.covar_ridx[p][f]
-                pE[p]+=pair_W[p][f]*pair_W[p][f]*covar[i][i]
-                p_AE[a]+=pair_W[p][f]*pair_W[p][f]*covar[i][i]*zeta[p]*zeta[p]
+                pE[p]+=pair_W[p][f]*pair_W[p][f]*self.covarDiag[ia][i]
+                p_AE[a]+=pair_W[p][f]*pair_W[p][f]*self.covarDiag[ia][i]*zeta[p]*zeta[p]
                 f+=1
             pC[p]=sum(pair_W[p])
             p_AC[a]+=sum(pair_W[p])
@@ -591,13 +664,22 @@ class GravWavBkgrdDetect:
         p_AE/=p_AC*p_AC
         p_AE=sqrt(p_AE)
     
-        f=open("%s/hd.plot"%self.path,"w")
+        f=open("%s/hd.plot"%outpath,"w")
         p=0
         while p < np:
-            f.write("%f\t%g\t%g\t%g\t%g\t%g\t%g\t%g\t%s %s\n"%(180.0*self.angles[p]/pi,pp[p]*zeta[p],abs(pE[p]*zeta[p]),pp[p],pE[p],self.A2_guess*zeta[p],A2*zeta[p],pC[p],pairs[p][0],pairs[p][1]))
+            f.write("%f\t%g\t%g\t%g\t%g\t%g\t%g\t%g\t%s %s\n"%(180.0*self.angles[p]/pi,pp[p]*zeta[p],abs(pE[p]*zeta[p]),pp[p],pE[p],self.A2_guess*zeta[p],self.A2*zeta[p],pC[p],pairs[p][0],pairs[p][1]))
             p+=1
     
         f.close()
+ 
+        f=open("%s/avhd.plot"%outpath,"w")
+        p=0
+        while p < 3:
+            f.write("%f\t%g\t%g\n"%(180.0*p_Aa[p]/pi,p_A[p],p_AE[p]))
+            p+=1
+    
+        f.close()
+
 
 
 
@@ -609,7 +691,7 @@ class GravWavBkgrdDetect:
         cross_i=array(cross_i)
         power_1=array(power_1)
         power_2=array(power_2)
-        xspec.append((freq,cross_r,cross_i,power_1,power_2))
+        xspec.append([freq,cross_r,cross_i,power_1,power_2])
         Ts.append((1.0/freq[0],freq[0]))
     
         # get the best power spectrum for each pulsar
@@ -689,21 +771,26 @@ def get_stats(detector):
     adaptive1_A2 = A2[adaptive1_ai]
     
     
-    ret= [zeroA2, halfA2, oneA2, adaptive1_A2, best_chi_a, best_chi,best_chi2_a, best_chi_A2]
+    ret= [zeroA2, halfA2, oneA2, adaptive1_A2, adaptive1_ai, best_chi_a, best_chi,best_chi2_a, best_chi_A2]
     ret.extend(chisq)
+    ret.extend(chisq2)
     return ret
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description='Detect the GWB.')
     parser.add_argument('-A','--gwamp',type=float,default=1e-15)
     parser.add_argument('-R','--redfile',default=None)
+    parser.add_argument('-f','--filename',default="GW.sum")
     parser.add_argument('-w','--white_factor',type=float,default=1.0)
     parser.add_argument('-n','--maxchans',type=int,default=10)
     parser.add_argument('-Z','--zerodir',default=None)
     parser.add_argument('-k','--skipfile',default=None)
     parser.add_argument('-d','--outdir',default=".")
     parser.add_argument('-Q','--quick',default=False, action='store_true')
+    parser.add_argument('-P','--plotfiles',default=False, action='store_true')
     parser.add_argument('--test',default=False, action='store_true')
+    parser.add_argument('-a','--write_avspec',default=False, action='store_true')
+    parser.add_argument('-c','--cfile',default=None)
 
     parser.add_argument('dirs',nargs="+")
 
@@ -722,7 +809,20 @@ if __name__ == "__main__":
         print err
         exit(1)
 
+
+
     detector = GravWavBkgrdDetect(args.gwamp)
+
+    
+    if args.cfile != None:
+        print "CORN"
+        corn=list()
+        with open(args.cfile) as f:
+            for line in f:
+                elems=line.split()
+                corn.append(float(elems[1])/float(elems[0]))
+        detector.corn=array(corn)
+        print "mean corn=",mean(detector.corn),detector.corn[0],detector.corn[10]
     detector.QUICK=args.quick
     if detector.QUICK:
         print "QUICK MODE - NO chisq computaiton possible"
@@ -735,6 +835,7 @@ if __name__ == "__main__":
 
     detector.max_channels = args.maxchans
     if args.test:
+        TESTY=list()
         print "*** TEST MODE ***"
     
     ii=0
@@ -742,12 +843,13 @@ if __name__ == "__main__":
     offstats=None
     #detector.little_as=[0.0]
     for d in args.dirs:
-        infile=d+"/GW.sum"
-        print "Processing '%s'                \r"%(infile),
+        infile=d+"/"+args.filename
+        print "Processing '%s'                [%d]\r"%(infile,ii),
         stdout.flush()
         detector.read_xspec(infile)
 
         if detector.cinvs==None:
+            print ""
             npsr=1
             np=0
             while np < detector.np:
@@ -769,48 +871,7 @@ if __name__ == "__main__":
             print "Compute covar"
             detector.compute_covaraince_matrix()
             
-            
-            ##### BEGIN TEST
-            if args.test:
-                detector.form_Cinvs()
-                detector.get_Aijks()
-                detector.getA2(10)
-                detector.form_Uinvs()
-                white_res = detector.get_whitened_residuals(10)
-                print mean(white_res),sqrt(var(white_res))
-                plt.plot(white_res)
-                
-                plt.figure()
-                detector.getA2(5)
-                white_res = detector.get_whitened_residuals(5)
-                print mean(white_res),sqrt(var(white_res))
-                plt.plot(white_res)
-                
-                plt.figure()
-                detector.getA2(0)
-                white_res = detector.get_whitened_residuals(0)
-                print mean(white_res),sqrt(var(white_res))
-                plt.plot(white_res)
-                
-                
-                
-                infile=args.zerodir+d+"/GW.sum"
-                detector.read_xspec(infile)
-                detector.get_Aijks()
-                detector.getA2(0)
-                plt.figure()
-                white_res = detector.get_whitened_residuals(0)
-                print mean(white_res),sqrt(var(white_res))
-                plt.plot(white_res)
-                
-                plt.show()
-                
-                exit(1)
-            
-            
-            
-            ##### END TEST
-            
+           
             print "Compute cinvs"
             detector.form_Cinvs()
             
@@ -818,14 +879,58 @@ if __name__ == "__main__":
             #detector.form_Uinvs()
             detector.clear_covar()
             
+            f = open("%s/theory.var"%args.outdir,"w")
             ai=0
             for a in detector.little_as:
                 print "%0.2f  %.3g"%(a,detector.theory_var[ai])
+                f.write("%0.2f  %.3g\n"%(a,detector.theory_var[ai]))
                 ai+=1
+            f.close()
 
+
+        ##### BEGIN TEST
+        if args.test:
+            if False:
+                if len(TESTY) == 0:
+                    for p1,p2 in detector.pairs:
+                        TESTY.append(zeros((2,args.maxchans)))
+                i = 0
+                for p1,p2 in detector.pairs:
+                    n1=detector.pwr_models[i][0]
+                    n2=detector.pwr_models[i][1]
+                    xspec=detector.xspec[i]
+                    X=xspec[0]
+                    Y1=n1.value(X)
+                    Y2=n2.value(X)
+                    G=detector.A2_guess * detector.P_gw_nrm(X)
+                    TESTY[i][0]+=xspec[3]
+                    TESTY[i][1]+=xspec[4]
+                    if ii > 995:
+                        plt.loglog(X,TESTY[i][0]/float(ii),color='red')
+                        plt.loglog(X,Y1+G,':',color='red')
+                        plt.loglog(X,TESTY[i][1]/float(ii),color='blue')
+                        plt.loglog(X,Y2+G,':',color='blue')
+                        plt.loglog(X,G,'--',color='green')
+
+                        plt.title("%s -- %s"%(p1,p2))
+                        plt.show()
+                    i+=1
+                
+                if ii > 995:
+                    exit(1)
+        
+        
+        
+        ##### END TEST
         detector.get_Aijks()
+        if args.write_avspec:
+            detector.add_spec()
 
         ss = get_stats(detector)
+        if args.plotfiles:
+            ai=ss[4]
+            detector.write_plotfiles(d,ai)
+
         if onstats==None:
             onstats = zeros((len(ss),len(args.dirs)))
         si=0
@@ -834,13 +939,14 @@ if __name__ == "__main__":
             si+=1
                 
         if args.zerodir != None:
-            infile=args.zerodir+d+"/GW.sum"
-            print "Processing '%s/GW.sum' [ZERO]            \r"%(d),
+            infile="%s/%s/%s"%(args.zerodir,d,args.filename)
+            print "Processing '%s/%s' [ZERO]            \r"%(d,args.filename),
             stdout.flush()
             detector.read_xspec(infile)
             detector.get_Aijks()
 
             ss = get_stats(detector)
+
             if offstats==None:
                 offstats = zeros((len(ss),len(args.dirs)))
             si=0
@@ -868,7 +974,8 @@ if __name__ == "__main__":
 
         f.close()
         
-        
+    if args.write_avspec:
+        detector.write_avspec(args.outdir)
         
     print "0", detector.little_as[0], mean(offstats[0]),sqrt(var(offstats[0])), detector.theory_var[0], sqrt(var(offstats[0]))/detector.theory_var[0]
     

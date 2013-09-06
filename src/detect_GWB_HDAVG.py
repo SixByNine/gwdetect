@@ -1,5 +1,6 @@
 #!/usr/bin/python
 from sys import argv
+from math import radians
 from numpy import *
 from matplotlib.pyplot import *
 
@@ -12,10 +13,11 @@ pairs=list()
 first=True
 n=0
 A=float(argv[1])
+A2_guess=A*A
 
-for a in argv[2:]:
-    print a
-    f=open(a)
+for fn in argv[2:]:
+    print fn
+    f=open(fn)
     i=0
     for line in f:
         elems=line.split()
@@ -23,6 +25,12 @@ for a in argv[2:]:
         v=float(elems[1])
         e=float(elems[2])
         w=float(elems[7])
+        w=1.0
+
+        x=(1.0-cos(radians(a)))/2.0
+        z=(3.0/2.0)*x*log(x) - x/4.0 + 0.5
+        if abs(v-z*A2_guess)/e > 4:
+            print "ERR %s %f\tsig=%+.2f v=%.2g e=%.2g g=%.2g"%(fn,a,(v-z*A2_guess)/e,v,e,z*A2_guess)
         if first:
             angles.append(a)
             avg.append(v*w)
@@ -62,11 +70,10 @@ for a,v,e in zip(angles,avg,avgE):
 f.close()
 
 
-A2_guess=A*A
 p=0
 while p < len(angles):
     if abs(avg[p]-A2_guess*zeta[p]) > 4*avgE[p]:
-        print "BAD",pairs[p], angles[p],avg[p],A2_guess*zeta[p],avgE[p],abs(avg[p]-A2_guess*zeta[p])/avgE[p]
+        print "BAD %s %f sig=%+.2g v=%.2g e=%.2g g=%.2g"%(pairs[p], angles[p],(avg[p]-A2_guess*zeta[p])/avgE[p],avg[p],avgE[p],A2_guess*zeta[p])
     p+=1
 
 errorbar(angles,avg,avgE,fmt='x',color='red')

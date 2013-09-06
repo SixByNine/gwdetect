@@ -2,10 +2,10 @@
 import sys
 import os
 from numpy import *
-import gtk
+#import gtk
 import matplotlib as mpl
 import copy
-mpl.use("GTKAgg")
+#mpl.use("GTKAgg")
 
 import matplotlib.pyplot as plt
 

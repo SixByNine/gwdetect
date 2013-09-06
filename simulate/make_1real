@@ -8,7 +8,8 @@ amp=5e-14
 rm -rf real.$ireal
 mkdir real.$ireal
 cd real.$ireal
-cp ../*.par .
+ln -s ../*.par .
+ln -s ../*.model .
 ln -s ../*.ideal .
 ln -s ../*.add* .
 
@@ -33,8 +34,6 @@ for i in *.par ; do
 done
 
 wait
-
-cp ../*.model .
 
 exit
 
