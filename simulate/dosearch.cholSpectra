@@ -1,0 +1,57 @@
+#!/bin/bash
+T0=`date +%s`
+nthread=4
+amp=1e-14
+. ./settings
+end=$(($nreal-1))
+
+wd=`pwd`
+start=0
+if [[ $# -gt 0 ]] ; then
+   echo $1
+   start=$1
+fi
+if [[ $# -gt 1 ]] ; then
+   echo $2
+   end=$2
+fi
+
+
+
+for trial in `seq $start $end` ; do
+   cd $wd
+   
+   while [[ `jobs -r | wc -l` -ge $nthread ]] ; do
+	  T1=`date +%s`
+	  dT=$(($T1-$T0))
+	  n=`jobs -r | wc -l`
+	  echo -ne "\rReal $trial - wait ($n/$nthread) running" `date +%T` `sysctl -n vm.loadavg` " ($dT s)   "
+	  sleep 0.5
+   done
+   if [[ ! -e real.$trial ]] ; then
+	  echo "ERROR NO real.$trial"
+	  wait
+	  exit
+   fi
+   cd real.$trial
+   if [[ ! -e mjk.model ]] ; then
+	  ln -s ../*.model .
+   fi
+
+#   if [[ $trial -eq 4 ]] ; then
+#	  wait
+#	  exit 1
+#   fi
+
+   echo -n "tempo2-mjk -gr cholSpectra " > cmd_xspec
+   cat many >> cmd_xspec
+   echo " -dcf mjk.model -tspan 2283 -xspec -yr -nofit -fit f0 -fit f1 -cache -round" >> cmd_xspec
+
+   echo -e "\r" `head -c 80 cmd_xspec`"..."
+   /usr/bin/time sh cmd_xspec > cmd_xspec.log 2>&1 &
+   sleep 0.25
+done
+
+
+echo -e "Wait for threads to end " `date +%T` `sysctl -n vm.loadavg` " ($dT s)   "
+wait

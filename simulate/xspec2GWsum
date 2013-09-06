@@ -1,0 +1,65 @@
+#! /bin/bash
+nthread=4
+EXT=$1
+function doit {
+i=$1
+wd=$2
+cd $i
+echo $i GW.$EXT
+if [[ -e GW.$EXT ]] ; then
+   rm GW.$EXT
+fi
+
+for x in *.xspec ; do
+   set -- `echo $x | awk -F. '{print $1,$2}'`
+   p1=$1
+   p2=$2
+   if [[ -e ../angle.cache/$p1.$p2 ]] ; then
+	  z=`cat ../angle.cache/$p1.$p2`
+   else
+	  echo "make cache $p1.$p2"
+
+	  for p in $p1 $p2 ; do
+		 if [[ ! -e ../$p.wpsd ]]  ;then
+			w=`get_wrms.py $p.tim -psd`
+			echo $w > ../$p.wpsd
+		 fi
+	  done
+	  w1=`cat ../$p1.wpsd`
+	  w2=`cat ../$p2.wpsd`
+	  v=`grep $p1 ../angles | grep $p2`
+	  set -- $v
+	  if [[ $1 == $p1 ]] ; then
+		 z=`echo "# $v $w1 $w2"`
+	  elif [[ $1 == $p2 ]] ; then 
+		 z=`echo "# $v $w2 $w1"`
+	  fi
+	  echo $z > ../angle.cache/$p1.$p2
+   fi
+
+   echo $z >> GW.$EXT
+   cat $x >> GW.$EXT
+done
+cd $wd
+
+}
+
+
+
+if [[ -z "$EXT" ]] ; then
+   EXT="nfo"
+fi
+
+wd=`pwd`
+mkdir -p angle.cache
+for i in real.* ; do
+   
+   while [[ `jobs -r | wc -l` -ge $nthread ]] ; do
+	  T1=`date +%s`
+	  n=`jobs -r | wc -l`
+	  echo -ne "\rReal $trial - wait ($n/$nthread) running" `date +%T` `sysctl -n vm.loadavg`
+	  sleep 0.5
+   done
+
+   doit $i $wd &
+done
