@@ -47,10 +47,13 @@ class GravWavBkgrdDetect:
             ip=0
             for p in self.pairs:
                 N+=len(self.xspec[ip][0])*2
+            addr.av2 = zeros(N)
             addr.avg_spec = zeros(N)
             addr.avg2_spec = zeros(N)
             addr.spec_copy = list()
+            addr.A2copy = list()
             addr.model_spec = zeros(N)
+            addr.m2 = zeros(N)
             ip=0
             i=0
             for p in self.pairs:
@@ -61,7 +64,30 @@ class GravWavBkgrdDetect:
                         addr.model_spec[i] += P+G
                         i+=1
                 ip+=1
+            ip=0
+            i=0
+            for p in self.pairs:
+                for freq in self.xspec[ip][0]:
+                    m1 = self.pwr_models[ip][0]
+                    m2 = self.pwr_models[ip][1]
+                    G1=self.A2_guess * self.P_gw_nrm(freq)
+                    P1= m1.value(freq)
+                    G2=self.A2_guess * self.P_gw_nrm(freq)
+                    P2= m2.value(freq)
+                    addr.m2[i] += sqrt((P1+G1)*(P2+G2))
+                    i+=1
+                ip+=1
+        ip=0
+        i=0
+        for p in self.pairs:
+            j=0
+            for freq in self.xspec[ip][0]:
+                addr.av2[i] += sqrt(self.xspec[ip][3][j]*self.xspec[ip][4][j])
+                i+=1
+                j+=1
+            ip+=1
         addr.spec_copy.append(zeros(len(addr.avg_spec)))
+        addr.A2copy.append(zeros(len(self.A2ijk)))
         ip=0
         i=0
         for p in self.pairs:
@@ -72,7 +98,10 @@ class GravWavBkgrdDetect:
                     addr.spec_copy[-1][i] = v
                     i+=1
             ip+=1
-            
+        i=0
+        for v in self.A2ijk:
+            addr.A2copy[-1][i]=v
+            i+=1
         addr.Nadd+=1
     
     def write_avspec(self,addr,outpath="."):
@@ -136,6 +165,17 @@ class GravWavBkgrdDetect:
             m=addr.model_spec[i]
             new_m=new_model_spec[i]
             f.write("%g %g %g %g %s %g %g %g\n"%(v/N,m,new_m,fff[i],ppp[i],mean(specs[i]),sqrt(var(specs[i])/N),err/sqrt(N)))
+        f.close()
+
+        f=open("%s/a2avspec.%s"%(outpath,addr.name),"w")
+        ms=mean(addr.A2copy,0)
+        vs=var(addr.A2copy,0)
+        for i in range(len(ms)):
+            p=int(i/self.max_channels)
+            f.write("%g %g %g %g %s %s %g %g %g\n"%(ms[i],vs[i],sqrt(vs[i]),self.A2_guess/ms[i],self.pairs[p][0],self.pairs[p][1],self.xspec[p][0][i%self.max_channels],addr.av2[i]/N,addr.m2[i]))
+        f.close()
+
+
         f.close()
     
     def getA2(self,ai):
@@ -203,7 +243,7 @@ class GravWavBkgrdDetect:
         self.covar_an=None
         gc.collect()
 
-    def form_Cinvs(self):
+    def form_Cinvs(self,a2varfix=None):
         self.cinvs=list()
         self.Ww = list()
         self.theory_var = list()
@@ -219,6 +259,8 @@ class GravWavBkgrdDetect:
                   + self.covar_n  * n      \
                   + self.covar_nn * n * n  \
                   + self.covar_an * a * n
+            if a2varfix !=None:
+                covar *= diag(a2varfix)
                   
             self.covarDiag.append(covar.diagonal())
             M=zeros(self.N)+1
@@ -241,7 +283,7 @@ class GravWavBkgrdDetect:
             Cinv=None
             covar=None
     
-    def get_Aijks(self):
+    def get_A2ijks(self):
         if self.corn != None:
             self.correct_xspec()
         A2ijk=list()
@@ -865,6 +907,7 @@ if __name__ == "__main__":
     parser.add_argument('--test',default=False, action='store_true')
     parser.add_argument('-a','--write_avspec',default=False, action='store_true')
     parser.add_argument('-c','--cfile',default=None)
+    parser.add_argument('-C','--a2fix',default=None)
     parser.add_argument('-W','--whitefile',default=None)
     parser.add_argument('-y','--yrskip',type=float,default=-1)
 
@@ -912,6 +955,43 @@ if __name__ == "__main__":
                 corn.append(float(elems[iii])/float(elems[0]))
         detector.corn=array(corn)
         print "mean corn=",mean(detector.corn),detector.corn[0],detector.corn[10]
+
+
+    a2varfix=None
+    if args.a2fix != None:
+        print "FIX A2"
+        a2fix=list()
+        a2varfix=list()
+        with open(args.a2fix) as f:
+            for line in f:
+                elems=line.split()
+                a2v = float(elems[0])
+                a2e = float(elems[2])/sqrt(1000.0)
+                if abs(a2v-detector.A2_guess)/a2e<2:
+                    a2fix.append(1.0)
+                    a2varfix.append(1.0)
+                    continue
+                factor = detector.A2_guess/a2v
+                if 1.0/factor < 0.1:
+                    a2fix.append(0)
+                    a2varfix.append(100.0)
+                    continue
+                a2fix.append(factor)
+                rv=float(elems[7])
+                rm=float(elems[8])
+                rfactor = rm/rv
+                if rfactor > factor:
+                    a2varfix.append(rfactor/factor)
+                else:
+                    a2varfix.append(1.0)
+
+            a2fix=array(a2fix)
+            a2varfix=array(a2varfix)
+
+            ff=open("tt","w")
+            for a,b in zip(a2fix,a2varfix):
+                ff.write("%g %g\n"%(a,b))
+            ff.close()
     detector.QUICK=args.quick
     if detector.QUICK:
         print "QUICK MODE - NO chisq computaiton possible"
@@ -965,7 +1045,7 @@ if __name__ == "__main__":
             
            
             print "Compute cinvs"
-            detector.form_Cinvs()
+            detector.form_Cinvs(a2varfix=a2varfix)
             
             #print "Compute Uinvs"
             #detector.form_Uinvs()
@@ -1014,7 +1094,9 @@ if __name__ == "__main__":
         
         
         ##### END TEST
-        detector.get_Aijks()
+        detector.get_A2ijks()
+        if args.a2fix != None:
+            detector.A2ijk*=a2fix
         if args.write_avspec:
             detector.add_spec(onaddr)
 
@@ -1035,7 +1117,9 @@ if __name__ == "__main__":
             print "Processing '%s/%s' [ZERO]            \r"%(d,args.filename),
             stdout.flush()
             detector.read_xspec(infile)
-            detector.get_Aijks()
+            detector.get_A2ijks()
+            if args.a2fix != None:
+                detector.A2ijk*=a2fix
 
             if args.write_avspec:
                 detector.add_spec(offaddr)
