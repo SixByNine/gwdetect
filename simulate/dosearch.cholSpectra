@@ -45,7 +45,7 @@ for trial in `seq $start $end` ; do
 
    echo -n "tempo2-mjk -gr cholSpectra " > cmd_xspec
    cat many >> cmd_xspec
-   echo " -dcf mjk.model -tspan 2283 -xspec -yr -nofit -fit f0 -fit f1 -cache -round" >> cmd_xspec
+   echo " -dcf mjk.model -xspec -yr -fit f0 -fit f1 -cache -round" >> cmd_xspec
 
    echo -e "\r" `head -c 80 cmd_xspec`"..."
    /usr/bin/time sh cmd_xspec > cmd_xspec.log 2>&1 &

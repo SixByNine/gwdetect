@@ -7,6 +7,54 @@ import random
 from matplotlib import pyplot as plt
 
 
+    
+def make_GW_covar(angles, psrs):
+    np=len(psrs)
+    GWCovar=zeros((np,np))
+    i=0
+    for p1 in psrs:
+        j=0
+        for p2 in psrs:
+            if p1==p2:
+                zeta=1
+            else:
+                x=(1.0-cos(radians(angles[p1][p2])))/2.0
+                zeta=(3.0/2.0)*x*log(x) - x/4.0 + 0.5
+            GWCovar[i][j]=zeta
+            j+=1
+        i+=1
+    return GWCovar
+
+
+
+def make_red_noise(N,M,alpha,dt,gwamp,gw=True,fc=0.05):
+    L=M*N
+    spec=zeros(L,dtype=dtype(complex))
+    freq=fft.fftfreq(L,dt)
+    if gw:
+        amp = gwamp*gwamp / 12.0 / pi / pi # yr3
+    else:
+        print "TEST",fc,alpha,gwamp
+        amp=gwamp/pow(fc,alpha) # For non-GW red noise
+    print "A (yr3) =",amp
+    print "A (fc) =",amp*pow(fc,alpha)
+    amp = amp / (4*dt*L)
+    amp=sqrt(amp)
+    i=0
+    for f in freq:
+        if f > 0:
+            A=amp*pow(f,alpha/2.0)
+            spec[i]=A*complex(random.gauss(0,1),random.gauss(0,1))
+            spec[L-i]=spec[i].conjugate()
+        i+=1
+    spec[0]=0
+    spec[L/2]=0
+    ts = fft.ifft(spec)
+    ts=real(ts)*L
+    ts *=365.25*86400.0
+    return ts
+
+
 class ifunc_simulator:
     def __init__(self,args):
         Nreal=100
@@ -168,12 +216,12 @@ class ifunc_simulator:
         i=0
         for psr in self.psrs:
             print psr
-            ts = self.make_red_noise(N,Nreal,-13.0/3.0,self.tsamp/365.25,Agwb)
+            ts = make_red_noise(N,Nreal,-13.0/3.0,self.tsamp/365.25,Agwb)
             data[i]+=ts
             i+=1
 
         if GWcor:
-            self.make_GW_covar(angles,self.psrs)
+            self.GWCovar = make_GW_covar(angles,self.psrs)
             C=self.GWCovar
             L = linalg.cholesky(C)
             timeseries = dot(L,data)
@@ -286,61 +334,6 @@ class ifunc_simulator:
                 real+=1
             ipsr+=1
 
-        
-    def make_GW_covar(self, angles, psrs):
-        np=len(psrs)
-        GWCovar=zeros((np,np))
-        i=0
-        for p1 in psrs:
-            j=0
-            for p2 in psrs:
-                if p1==p2:
-                    zeta=1
-                else:
-                    x=(1.0-cos(radians(angles[p1][p2])))/2.0
-                    zeta=(3.0/2.0)*x*log(x) - x/4.0 + 0.5
-                GWCovar[i][j]=zeta
-                j+=1
-            i+=1
-        self.GWCovar=GWCovar
-
-
-
-    def make_red_noise(self,N,M,alpha,dt,gwamp,gw=True,fc=0.05):
-        L=M*N
-        spec=zeros(L,dtype=dtype(complex))
-        freq=fft.fftfreq(L,dt)
-        if gw:
-            amp = gwamp*gwamp / 12.0 / pi / pi # yr3
-        else:
-            print "TEST",fc,alpha,gwamp
-            amp=gwamp/pow(fc,alpha) # For non-GW red noise
-        print "A (yr3) =",amp
-        print "A (fc) =",amp*pow(fc,alpha)
-        amp = amp / (4*dt*L)
-        amp=sqrt(amp)
-        i=0
-        for f in freq:
-            if f > 0:
-                A=amp*pow(f,alpha/2.0)
-                spec[i]=A*complex(random.gauss(0,1),random.gauss(0,1))
-                spec[L-i]=spec[i].conjugate()
-            i+=1
-        spec[0]=0
-        spec[L/2]=0
-        ts = fft.ifft(spec)
-        ts=real(ts)*L
-        #plt.loglog(freq,(gwamp*gwamp/12.0/pi/pi/ (4*dt*L))*power(freq,alpha))
-        #plt.figure()
-        ts *=365.25*86400.0
-        return ts
-        #x=linspace(0,(N-1)*dt,N)
-        #y=(ts[0:N]-mean(ts[0:N]))
-        #z=polyfit(x,y,2)
-        #m=x*z[1]+z[2]+x*x*z[0]
-        #plt.ylabel("Residual (ns)")
-        #plt.xlabel("time (years)")
-        #plt.plot(x,(y-m)*1e9)
 
 
 #UWL bands

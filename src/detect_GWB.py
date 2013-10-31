@@ -11,6 +11,11 @@ from scipy import sparse
 from scipy import linalg as lalg
 from matplotlib import pyplot as plt
 
+class SpecAddr:
+    def __init__(self,name):
+        self.Nadd=0
+        self.name=name
+
 class GravWavBkgrdDetect:
     def __init__(self,A_guess):
         self.ALPHA=-13.0/3.0
@@ -32,16 +37,20 @@ class GravWavBkgrdDetect:
         self.QUICK=False
         self.Nadd=0
         self.corn=None
+        self.wf=dict()
+        self.yrskip=0.1
     
-    def add_spec(self):
-        if self.Nadd==0:
+    def add_spec(self,addr):
+        if addr.Nadd==0:
             # Initialise the arrays
             N=0
             ip=0
             for p in self.pairs:
                 N+=len(self.xspec[ip][0])*2
-            self.avg_spec = zeros(N)
-            self.model_spec = zeros(N)
+            addr.avg_spec = zeros(N)
+            addr.avg2_spec = zeros(N)
+            addr.spec_copy = list()
+            addr.model_spec = zeros(N)
             ip=0
             i=0
             for p in self.pairs:
@@ -49,25 +58,84 @@ class GravWavBkgrdDetect:
                     for freq in self.xspec[ip][0]:
                         G=self.A2_guess * self.P_gw_nrm(freq)
                         P= m.value(freq)
-                        self.model_spec[i] += P+G
+                        addr.model_spec[i] += P+G
                         i+=1
+                ip+=1
+        addr.spec_copy.append(zeros(len(addr.avg_spec)))
         ip=0
         i=0
         for p in self.pairs:
             for idx in [3,4]:
                 for v in self.xspec[ip][idx]:
-                    self.avg_spec[i] += v
+                    addr.avg_spec[i] += v
+                    addr.avg2_spec[i] += v*v
+                    addr.spec_copy[-1][i] = v
                     i+=1
+            ip+=1
             
-        self.Nadd+=1
+        addr.Nadd+=1
     
-    def write_avspec(self,outpath="."):
-        f=open("%s/avspec"%outpath,"w")
-        N=float(self.Nadd)
-        for i in range(len(self.avg_spec)):
-            v=self.avg_spec[i]
-            m=self.model_spec[i]
-            f.write("%g %g\n"%(v/N,m))
+    def write_avspec(self,addr,outpath="."):
+        f=open("%s/white.%s"%(outpath,addr.name),"w")
+        N=float(addr.Nadd)
+        ip=0
+        i=0
+        wf=dict()
+        for p1,p2 in self.pairs:
+            for p in [p1,p2]:
+                if p not in wf:
+                    wf[p]=list()
+            for m,psr in zip(self.pwr_models[ip],[p1,p2]):
+                nf=len(self.xspec[ip][0])
+                for ii in range(nf):
+                    if ii == nf-1:
+                        v=addr.avg_spec[i]/N
+                        m=addr.model_spec[i]
+                        wf[psr].append(v/m)
+                    i+=1
+
+            ip+=1
+
+        for psr in wf:
+            f.write("%s %f\n"%(psr,mean(wf[psr])))
+            wf[psr] = mean(wf[psr])
+        f.close()
+
+        new_model_spec = zeros(len(addr.avg_spec))
+        fff = zeros(len(addr.avg_spec))
+
+        ppp=list()
+        ip=0
+        i=0
+        for p1,p2 in self.pairs:
+            for m,psr in zip(self.pwr_models[ip],[p1,p2]):
+                for freq in self.xspec[ip][0]:
+                    newm = pwr_model()
+                    newm.white=m.white*wf[psr]
+                    newm.red=m.red
+                    G=self.A2_guess * self.P_gw_nrm(freq)
+                    P= newm.value(freq)
+                    new_model_spec[i] += P+G
+                    fff[i] = freq
+                    ppp.append("%s-%s"%(p1,p2))
+                    i+=1
+            ip+=1
+
+        f=open("%s/avspec.%s"%(outpath,addr.name),"w")
+        N=float(addr.Nadd)
+        specs=zeros((addr.Nadd,len(addr.avg_spec)))
+        for i in range(addr.Nadd):
+            for j in range(len(addr.avg_spec)):
+                specs[i][j] = addr.spec_copy[i][j]
+
+        specs= specs.T
+
+        for i in range(len(addr.avg_spec)):
+            v=addr.avg_spec[i]
+            err=sqrt(addr.avg2_spec[i]/N - v*v/N/N)
+            m=addr.model_spec[i]
+            new_m=new_model_spec[i]
+            f.write("%g %g %g %g %s %g %g %g\n"%(v/N,m,new_m,fff[i],ppp[i],mean(specs[i]),sqrt(var(specs[i])/N),err/sqrt(N)))
         f.close()
     
     def getA2(self,ai):
@@ -201,7 +269,7 @@ class GravWavBkgrdDetect:
         for p in self.pairs:
             nf=len(self.xspec[ip][0])
             for ii in range(nf):
-                F=self.corn[i]*self.corn[i+nf]
+                F=sqrt(self.corn[i]*self.corn[i+nf])
                 self.xspec[ip][1][ii] *= F
                 self.xspec[ip][2][ii] *= F
                 self.xspec[ip][3][ii] *= self.corn[i]
@@ -230,15 +298,21 @@ class GravWavBkgrdDetect:
         pwr_models=list()
         p=0
         for pair in self.pairs:
+            wf1=1.
+            wf2=1.
+            if pair[0] in self.wf:
+                wf1=self.wf[pair[0]]
             m1 = pwr_model()
-            m1.white=self.white[p][0]*white_factor
+            m1.white=self.white[p][0]*white_factor*wf1
             if pair[0] in red:
                 m1.red=red[pair[0]]
             else:
                 m1.red=[]
     
+            if pair[1] in self.wf:
+                wf2=self.wf[pair[1]]
             m2 = pwr_model()
-            m2.white=self.white[p][1]*white_factor
+            m2.white=self.white[p][1]*white_factor*wf2
             if pair[1] in red:
                 m2.red=red[pair[1]]
             else:
@@ -539,7 +613,7 @@ class GravWavBkgrdDetect:
                     iii += 1
                     continue
                 fff = float(elems[0])
-                if fff > self.fmax:
+                if fff > self.fmax or abs(fff-1.0) < self.yrskip:
                     continue
                 if ii == 0:
                     pairs.append((p1, p2))
@@ -791,6 +865,8 @@ if __name__ == "__main__":
     parser.add_argument('--test',default=False, action='store_true')
     parser.add_argument('-a','--write_avspec',default=False, action='store_true')
     parser.add_argument('-c','--cfile',default=None)
+    parser.add_argument('-W','--whitefile',default=None)
+    parser.add_argument('-y','--yrskip',type=float,default=-1)
 
     parser.add_argument('dirs',nargs="+")
 
@@ -812,15 +888,28 @@ if __name__ == "__main__":
 
 
     detector = GravWavBkgrdDetect(args.gwamp)
-
+    detector.yrskip = args.yrskip
+    if args.whitefile != None:
+        print "WF"
+        wf=dict()
+        with open(args.whitefile) as f:
+            for line in f:
+                elems=line.split()
+                wf[elems[0]]=float(elems[1])
+        detector.wf=wf
+        
+        
     
     if args.cfile != None:
         print "CORN"
+        iii=1
+        if args.whitefile!=None:
+            iii=2
         corn=list()
         with open(args.cfile) as f:
             for line in f:
                 elems=line.split()
-                corn.append(float(elems[1])/float(elems[0]))
+                corn.append(float(elems[iii])/float(elems[0]))
         detector.corn=array(corn)
         print "mean corn=",mean(detector.corn),detector.corn[0],detector.corn[10]
     detector.QUICK=args.quick
@@ -838,6 +927,9 @@ if __name__ == "__main__":
         TESTY=list()
         print "*** TEST MODE ***"
     
+    if args.write_avspec:
+        onaddr=SpecAddr("on")
+        offaddr=SpecAddr("off")
     ii=0
     onstats=None
     offstats=None
@@ -924,7 +1016,7 @@ if __name__ == "__main__":
         ##### END TEST
         detector.get_Aijks()
         if args.write_avspec:
-            detector.add_spec()
+            detector.add_spec(onaddr)
 
         ss = get_stats(detector)
         if args.plotfiles:
@@ -945,6 +1037,8 @@ if __name__ == "__main__":
             detector.read_xspec(infile)
             detector.get_Aijks()
 
+            if args.write_avspec:
+                detector.add_spec(offaddr)
             ss = get_stats(detector)
 
             if offstats==None:
@@ -975,7 +1069,8 @@ if __name__ == "__main__":
         f.close()
         
     if args.write_avspec:
-        detector.write_avspec(args.outdir)
+        detector.write_avspec(onaddr,args.outdir)
+        detector.write_avspec(offaddr,args.outdir)
         
     print "0", detector.little_as[0], mean(offstats[0]),sqrt(var(offstats[0])), detector.theory_var[0], sqrt(var(offstats[0]))/detector.theory_var[0]
     

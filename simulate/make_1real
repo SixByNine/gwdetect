@@ -28,8 +28,8 @@ for i in *.par ; do
    if [[ -e $psr.ideal.addRedNoise ]] ; then
 	  red="-corn $psr.ideal.addRedNoise $ireal"
    fi
-   echo tempo2-mjk -gr createRealisation -f $psr.ideal -corn $psr.ideal.addGauss $ireal -corn $psr.ideal.addGWB $ireal $red -npsr 1 -nobs $nobs
-   tempo2-mjk -gr createRealisation -f $psr.ideal -corn $psr.ideal.addGauss $ireal -corn $psr.ideal.addGWB $ireal $red -npsr 1 -nobs $nobs  > /dev/null && mv $psr.ideal.real $psr.tim &
+   echo tempo2-mjk -gr createRealisation -f $psr.ideal $red -corn $psr.ideal.addGauss $ireal -corn $psr.ideal.addGWB $ireal -npsr 1 -nobs $nobs
+   tempo2-mjk -gr createRealisation -f $psr.ideal $red -corn $psr.ideal.addGauss $ireal -corn $psr.ideal.addGWB $ireal -npsr 1 -nobs $nobs  > /dev/null && mv $psr.ideal.real $psr.tim &
    echo -n "-f $psr.par $psr.tim " >> many
 done
 

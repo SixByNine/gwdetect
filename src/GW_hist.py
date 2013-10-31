@@ -109,6 +109,10 @@ for onoff in [ON,OFF]:
 
         plt.plot(x,y,'--',color=colours[c],linewidth=2,label="correlation:%s statistic:%s"%(onoff,stat_desc[c]))
         plt.vlines(A2g,0,YMAX*10,linestyle="-",color=colours[c])
+        fout=open("plot.%d.%s"%(c+1,onoff),"w")
+        for vx,vy in zip(x,y):
+            fout.write("%g %g\n"%(vx,vy))
+        fout.close()
 
         if onoff==OFF:
             plt.vlines(A2g+3*sigma,0,YMAX*10,linestyle=':',color=colours[c],linewidth=2)
