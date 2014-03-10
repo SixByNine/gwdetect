@@ -1,7 +1,6 @@
 #!/bin/bash
 T0=`date +%s`
-nthread=4
-amp=1e-14
+nthread=2
 . ./settings
 end=$(($nreal-1))
 

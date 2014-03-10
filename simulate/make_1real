@@ -17,7 +17,7 @@ echo -ne "REAL $ireal\r"
 for i in *.par ; do
    while [[ `jobs -r | wc -l` -ge $nthread ]] ; do
 	  n=`jobs -r | wc -l`
-	  echo -ne "Wait ($n/$nthread) running" `date +%T` `cat /proc/loadavg` "    \r"
+	  echo -ne "Wait ($n/$nthread) running" `date +%T` "    \r"
 	  sleep 0.05
    done
 

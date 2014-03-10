@@ -26,6 +26,7 @@ class make_GWB:
         parser.add_argument('-n','--npts',type=int,default=1024)
         parser.add_argument('-N','--nreal',type=int,default=1000)
         parser.add_argument('-U','--uncorr',default=False, action='store_true')
+        parser.add_argument('-D','--dipole',default=False, action='store_true')
         
 
         
@@ -35,9 +36,15 @@ class make_GWB:
         pairs=list()
         angles=dict()
         DO_GW_CORR = True
+        DO_DIPOLE_CORR = False
         if args.uncorr:
             DO_GW_CORR = False
             print "WARNING: GW correlation is DISABLED."
+        if args.dipole:
+            DO_GW_CORR = False
+            DO_DIPOLE_CORR = True
+            print "WARNING: GW correlation is DISABLED."
+            print "WARNING: DIPOLE correlation is ENABLED."
         
         Agwb = args.gwamp
 
@@ -123,6 +130,10 @@ class make_GWB:
             C = ifunc_simulator.make_GW_covar(angles,psrs)
             L = linalg.cholesky(C)
             timeseries = dot(L,rawData)
+        elif DO_DIPOLE_CORR:
+            C = ifunc_simulator.make_DIPOLE_covar(angles,psrs)
+            L = linalg.cholesky(C)
+            timeseries = dot(L,rawData)
         else:
             timeseries=rawData
         
@@ -166,13 +177,17 @@ class make_GWB:
 class psrinfo:
     def __init__(self,name,timfile):
         self.name=name
+        print name,timfile,
         t=list()
         with open(timfile) as f:
             for line in f:
+                if line.startswith("C") or line.startswith("#"):
+                    continue
                 e=line.split()
-                if len(e) > 5:
+                if len(e) > 4:
                     mjd=float(e[2])
                     t.append(mjd)
+        print len(t)
         self.T = array(t)
         self.T.sort()
     def start(self):

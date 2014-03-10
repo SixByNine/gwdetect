@@ -6,6 +6,24 @@ from numpy import *
 import random
 from matplotlib import pyplot as plt
 
+    
+def make_DIPOLE_covar(angles, psrs):
+    np=len(psrs)
+    DPCovar=zeros((np,np))
+    i=0
+    for p1 in psrs:
+        j=0
+        for p2 in psrs:
+            if p1==p2:
+                zeta=1
+            else:
+                zeta=0.5*cos(radians(angles[p1][p2]))
+            DPCovar[i][j]=zeta
+            j+=1
+        i+=1
+    return DPCovar
+
+
 
     
 def make_GW_covar(angles, psrs):

@@ -910,6 +910,7 @@ if __name__ == "__main__":
     parser.add_argument('-C','--a2fix',default=None)
     parser.add_argument('-W','--whitefile',default=None)
     parser.add_argument('-y','--yrskip',type=float,default=-1)
+    parser.add_argument('--start_chan',type=int,default=0)
 
     parser.add_argument('dirs',nargs="+")
 
@@ -932,6 +933,7 @@ if __name__ == "__main__":
 
     detector = GravWavBkgrdDetect(args.gwamp)
     detector.yrskip = args.yrskip
+    detector.start_channel=args.start_chan
     if args.whitefile != None:
         print "WF"
         wf=dict()
@@ -1029,6 +1031,7 @@ if __name__ == "__main__":
                 np=npsr*(npsr-1)/2
             if np != detector.np:
                 print "Error: number of pairs is not valid"
+                print "npsr=%d npair=%d expected=%d"%(npsr,np,detector.np)
                 exit(1)
             else:
                 print "Npsr = %d, Npair = %d"%(npsr,np)
@@ -1062,35 +1065,10 @@ if __name__ == "__main__":
 
         ##### BEGIN TEST
         if args.test:
-            if False:
-                if len(TESTY) == 0:
-                    for p1,p2 in detector.pairs:
-                        TESTY.append(zeros((2,args.maxchans)))
-                i = 0
-                for p1,p2 in detector.pairs:
-                    n1=detector.pwr_models[i][0]
-                    n2=detector.pwr_models[i][1]
-                    xspec=detector.xspec[i]
-                    X=xspec[0]
-                    Y1=n1.value(X)
-                    Y2=n2.value(X)
-                    G=detector.A2_guess * detector.P_gw_nrm(X)
-                    TESTY[i][0]+=xspec[3]
-                    TESTY[i][1]+=xspec[4]
-                    if ii > 995:
-                        plt.loglog(X,TESTY[i][0]/float(ii),color='red')
-                        plt.loglog(X,Y1+G,':',color='red')
-                        plt.loglog(X,TESTY[i][1]/float(ii),color='blue')
-                        plt.loglog(X,Y2+G,':',color='blue')
-                        plt.loglog(X,G,'--',color='green')
-
-                        plt.title("%s -- %s"%(p1,p2))
-                        plt.show()
-                    i+=1
-                
-                if ii > 995:
-                    exit(1)
-        
+            print detector.theory_var[0], detector.theory_var[10] ,"TT"
+            print detector.A2_guess/detector.theory_var[0], detector.A2_guess/detector.theory_var[10] ,"SN"
+            exit(1)
+       
         
         
         ##### END TEST

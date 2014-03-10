@@ -1,5 +1,5 @@
 #! /bin/bash
-nthread=4
+nthread=2
 EXT=$1
 function doit {
 i=$1
