@@ -19,6 +19,8 @@ parser.add_argument('--test',default=False, action='store_true')
 parser.add_argument('-c','--oncols',nargs='*',type=int,default=[1])
 parser.add_argument('-C','--offcols',nargs='*',type=int)
 parser.add_argument('-t','--title')
+parser.add_argument('-x','--xmin',type=float,default=None)
+parser.add_argument('-X','--xmax',type=float,default=None)
 parser.add_argument('--noplot',default=False, action='store_true')
 parser.add_argument('-N','--nbins',type=int,default=40)
 args=parser.parse_args()
@@ -153,8 +155,16 @@ if args.noplot == False:
 
     plt.vlines([0,A2/A2],0,YMAX*2,'k',linewidth=2)
     XR=XMAX-XMIN
-    plt.xlim((XMIN-0.1*XR,XMAX+0.1*XR))
+    xmin=XMIN-0.1*XR
+    xmax=XMAX+0.1*XR
+    if not args.xmin == None:
+        xmin=args.xmin
+
+    if not args.xmax == None:
+        xmax=args.xmax
+    plt.xlim((xmin,xmax))
     plt.ylim((0,YMAX+0.1*YMAX))
+
 
     plt.xlabel("Statistic value (A^2)")
     plt.ylabel("Probability density")

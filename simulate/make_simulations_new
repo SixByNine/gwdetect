@@ -1,0 +1,61 @@
+#!/bin/bash
+amp=1e-14
+nthread=8
+nreal=100
+
+. ./settings
+
+gwseed=1234
+#rm $amp.gwb
+for i in *.par ; do
+    psr=`basename $i .par`
+    #   while [[ `jobs -r | wc -l` -ge $nthread ]] ; do
+    #	  n=`jobs -r | wc -l`
+    #	  echo "Wait ($n/$nthread) running"
+    #	  sleep 1
+    #   done
+    if grep -q $psr psr.noise ; then
+
+        pw=`grep $psr psr.noise | awk '{print $2}'`
+        pyr3=`grep $psr psr.noise | awk '{print $3}'`
+        a=`grep $psr psr.noise | awk '{print $4}'`
+        fc=`grep $psr psr.noise | awk '{print $5}'`
+    else
+        pw=`get_wrms.py $psr.simulate -psd`
+        a=0
+        pyr3=0
+        fc=0.1
+    fi
+
+    nobs=`wc $psr.simulate`
+    noflag="-nobs $nobs -npsr 1"
+
+    tempo2-mjk -gr formIdeal -f $psr.par $psr.ideal $noflag
+
+    #grep -v "^EFAC" $psr.simulate.sim > $psr.tt
+    #mv $psr.tt $psr.simulate.sim
+    #ef=`get_wrms.py $psr.simulate.sim -tpsd=$pw`
+    #echo "FORMAT 1" > $psr.ideal
+    #echo "EFAC $ef" >> $psr.ideal
+    #grep -v "^FORMAT" $psr.simulate.sim >> $psr.ideal
+    mv $psr.ideal.sim $psr.ideal
+
+
+
+    echo "$psr W=$pw R=$pyr3 a=$a fc=$fc G=$amp EFAC=$ef"
+    tempo2-mjk -gr addGaussian -f $psr.par $psr.ideal -nreal $nreal
+
+    seed=`toasim_seed.py $psr red-$pyr3-$fc-$a`
+
+    if grep -q $psr psr.noise ; then
+
+        echo tempo2-mjk -gr addRedNoise -f $psr.par $psr.ideal -nofit -npsr 1 -seed $seed -Pyr3 $pyr3 -fc $fc -a -$a -nreal $nreal
+        tempo2-mjk -gr addRedNoise -f $psr.par $psr.ideal -nofit -npsr 1 -seed $seed -Pyr3 $pyr3 -fc $fc -a -$a -nreal $nreal $noflag 
+    fi
+done
+
+make_GWB.py -A $amp -a angles -N $nreal -p psr.list --tim .ideal
+
+echo "waiting for processes to finish"
+
+wait
