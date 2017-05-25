@@ -27,6 +27,7 @@ class make_GWB:
         parser.add_argument('-N','--nreal',type=int,default=1000)
         parser.add_argument('-U','--uncorr',default=False, action='store_true')
         parser.add_argument('-D','--dipole',default=False, action='store_true')
+        parser.add_argument('-I','--interp',default='linear')
         
 
         
@@ -157,8 +158,9 @@ class make_GWB:
                 while real < nreal:
                     print "%04d\r"%real,
                     sys.stdout.flush()
+
                     nn = real*npts1
-                    gw = interpolate.interp1d(gridMjds,timeseries[i][nn:nn+npts1],kind='cubic')
+                    gw = interpolate.interp1d(gridMjds,timeseries[i][nn:nn+npts1],kind=args.interp)
                     offsets=list()
                     for t in psrnfo[psr].T:
                         offsets.append(gw(t))
