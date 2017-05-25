@@ -30,7 +30,9 @@ for i in *.par ; do
     nobs=`wc $psr.simulate`
     noflag="-nobs $nobs -npsr 1"
 
-    tempo2-mjk -gr formIdeal -f $psr.par $psr.ideal $noflag
+    cp $psr.simulate $psr.ideal
+
+    tempo2 -gr formIdeal -f $psr.par $psr.ideal $noflag
 
     #grep -v "^EFAC" $psr.simulate.sim > $psr.tt
     #mv $psr.tt $psr.simulate.sim
@@ -43,14 +45,14 @@ for i in *.par ; do
 
 
     echo "$psr W=$pw R=$pyr3 a=$a fc=$fc G=$amp EFAC=$ef"
-    tempo2-mjk -gr addGaussian -f $psr.par $psr.ideal -nreal $nreal
+    tempo2 -gr addGaussian -f $psr.par $psr.ideal -nreal $nreal
 
     seed=`toasim_seed.py $psr red-$pyr3-$fc-$a`
 
     if grep -q $psr psr.noise ; then
 
-        echo tempo2-mjk -gr addRedNoise -f $psr.par $psr.ideal -nofit -npsr 1 -seed $seed -Pyr3 $pyr3 -fc $fc -a -$a -nreal $nreal
-        tempo2-mjk -gr addRedNoise -f $psr.par $psr.ideal -nofit -npsr 1 -seed $seed -Pyr3 $pyr3 -fc $fc -a -$a -nreal $nreal $noflag 
+        echo tempo2 -gr addRedNoise -f $psr.par $psr.ideal -nofit -npsr 1 -seed $seed -Pyr3 $pyr3 -fc $fc -a -$a -nreal $nreal
+        tempo2 -gr addRedNoise -f $psr.par $psr.ideal -nofit -npsr 1 -seed $seed -Pyr3 $pyr3 -fc $fc -a -$a -nreal $nreal $noflag 
     fi
 done
 

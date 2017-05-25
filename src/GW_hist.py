@@ -1,4 +1,4 @@
-#! /usr/bin/python
+#!/usr/bin/env python
 import os
 from math import *
 from numpy import *

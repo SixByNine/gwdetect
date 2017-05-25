@@ -57,7 +57,7 @@ for i in real.* ; do
    while [[ `jobs -r | wc -l` -ge $nthread ]] ; do
 	  T1=`date +%s`
 	  n=`jobs -r | wc -l`
-	  echo -ne "\rReal $trial - wait ($n/$nthread) running" `date +%T` `sysctl -n vm.loadavg`
+	  echo -ne "\rReal $trial - wait ($n/$nthread) running" `date +%T` 
 	  sleep 0.5
    done
 

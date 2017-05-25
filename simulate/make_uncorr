@@ -1,0 +1,23 @@
+#!/bin/bash
+
+#!/bin/bash
+amp=1e-14
+nthread=8
+nreal=100
+
+. ./settings
+
+mkdir uncorr
+
+if [[ ! -d uncorr ]] ; then
+print "ERROR"
+exit 1
+fi
+
+cp psr.* settings *.par *.add* *.ideal *.model angles uncorr
+
+cd uncorr
+
+rm *.addGWB
+
+make_GWB.py -A $amp -a angles -N $nreal -p psr.list --tim .ideal -U

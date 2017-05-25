@@ -1,4 +1,4 @@
-#!/usr/bin/python
+#!/usr/bin/env python
 from sys import argv
 from math import radians
 from numpy import *
@@ -79,6 +79,6 @@ while p < len(angles):
 errorbar(angles,avg,avgE,fmt='x',color='red')
 plot(180*aa/pi,azeta*A2_guess,color='red')
 plot(180*aa/pi,azeta*0,color='black')
-
+savefig("TEST.png")
 
 show()

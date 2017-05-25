@@ -8,10 +8,17 @@ amp=5e-14
 rm -rf real.$ireal
 mkdir real.$ireal
 cd real.$ireal
-ln -s ../*.par .
-ln -s ../*.model .
-ln -s ../*.ideal .
+
+
+while read line ; do
+	set -- $line
+	psr=$1
+	ln -s ../$psr.par .
+	ln -s ../$psr.ideal .
+done < ../psr.list
+
 ln -s ../*.add* .
+ln -s ../*.model .
 
 echo -ne "REAL $ireal\r"
 for i in *.par ; do
@@ -28,8 +35,8 @@ for i in *.par ; do
    if [[ -e $psr.ideal.addRedNoise ]] ; then
 	  red="-corn $psr.ideal.addRedNoise $ireal"
    fi
-   echo tempo2-mjk -gr createRealisation -f $psr.ideal $red -corn $psr.ideal.addGauss $ireal -corn $psr.ideal.addGWB $ireal -npsr 1 -nobs $nobs
-   tempo2-mjk -gr createRealisation -f $psr.ideal $red -corn $psr.ideal.addGauss $ireal -corn $psr.ideal.addGWB $ireal -npsr 1 -nobs $nobs  > /dev/null && mv $psr.ideal.real $psr.tim &
+   echo tempo2 -gr createRealisation -f $psr.ideal $red -corn $psr.ideal.addGauss $ireal -corn $psr.ideal.addGWB $ireal -npsr 1 -nobs $nobs
+   tempo2 -gr createRealisation -f $psr.ideal $red -corn $psr.ideal.addGauss $ireal -corn $psr.ideal.addGWB $ireal -npsr 1 -nobs $nobs  > /dev/null && mv $psr.ideal.real $psr.tim &
    echo -n "-f $psr.par $psr.tim " >> many
 done
 

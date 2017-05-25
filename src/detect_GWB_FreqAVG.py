@@ -1,4 +1,4 @@
-#!/usr/bin/python
+#!/usr/bin/env python
 from sys import argv
 from numpy import *
 from matplotlib.pyplot import *
@@ -61,6 +61,6 @@ for f,v,e in zip(freqs,avg,avgE):
 errorbar(freqs,avg,avgE,fmt='x',color='red')
 plot(freqs,freqs*0+A2_guess,color='red')
 plot(freqs,freqs*0,color='black')
-
+savefig("Fig.png")
 
 show()

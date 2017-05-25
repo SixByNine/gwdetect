@@ -1,4 +1,4 @@
-#! /usr/bin/python
+#!/usr/bin/env python
 import gc
 import argparse
 from sys import stdout

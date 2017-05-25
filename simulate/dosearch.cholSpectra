@@ -24,7 +24,7 @@ for trial in `seq $start $end` ; do
 	  T1=`date +%s`
 	  dT=$(($T1-$T0))
 	  n=`jobs -r | wc -l`
-	  echo -ne "\rReal $trial - wait ($n/$nthread) running" `date +%T` `sysctl -n vm.loadavg` " ($dT s)   "
+	  echo -ne "\rReal $trial - wait ($n/$nthread) running" `date +%T`  " ($dT s)   "
 	  sleep 0.5
    done
    if [[ ! -e real.$trial ]] ; then
@@ -42,7 +42,7 @@ for trial in `seq $start $end` ; do
 #	  exit 1
 #   fi
 
-   echo -n "tempo2-mjk -gr cholSpectra " > cmd_xspec
+   echo -n "tempo2 -gr cholSpectra " > cmd_xspec
    cat many >> cmd_xspec
    echo " -dcf mjk.model -xspec -yr -fit f0 -fit f1 -cache -round" >> cmd_xspec
 
@@ -52,5 +52,5 @@ for trial in `seq $start $end` ; do
 done
 
 
-echo -e "Wait for threads to end " `date +%T` `sysctl -n vm.loadavg` " ($dT s)   "
+echo -e "Wait for threads to end " `date +%T`  " ($dT s)   "
 wait
