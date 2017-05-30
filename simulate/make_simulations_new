@@ -5,15 +5,9 @@ nreal=100
 
 . ./settings
 
-gwseed=1234
-#rm $amp.gwb
-for i in *.par ; do
-    psr=`basename $i .par`
-    #   while [[ `jobs -r | wc -l` -ge $nthread ]] ; do
-    #	  n=`jobs -r | wc -l`
-    #	  echo "Wait ($n/$nthread) running"
-    #	  sleep 1
-    #   done
+
+function dopsr {
+    psr=$1
     if grep -q $psr psr.noise ; then
 
         pw=`grep $psr psr.noise | awk '{print $2}'`
@@ -27,36 +21,54 @@ for i in *.par ; do
         fc=0.1
     fi
 
-    nobs=`wc $psr.simulate`
+    nobs=`wc -l ${psr}.simulate | awk '{k=$1; if (k<5000)k=5000; print k+10}'`
     noflag="-nobs $nobs -npsr 1"
 
-    cp $psr.simulate $psr.ideal
+    if [[ -e ${psr}.ideal ]] ; then
+        rm ${psr}.ideal
+    fi
 
-    tempo2 -gr formIdeal -f $psr.par $psr.ideal $noflag
+    echo "tempo2 -gr formIdeal -f $psr.par $psr.simulate $noflag"
+    tempo2 -gr formIdeal -f $psr.par $psr.simulate $noflag
 
-    #grep -v "^EFAC" $psr.simulate.sim > $psr.tt
-    #mv $psr.tt $psr.simulate.sim
-    #ef=`get_wrms.py $psr.simulate.sim -tpsd=$pw`
-    #echo "FORMAT 1" > $psr.ideal
-    #echo "EFAC $ef" >> $psr.ideal
-    #grep -v "^FORMAT" $psr.simulate.sim >> $psr.ideal
-    mv $psr.ideal.sim $psr.ideal
-
-
+    mv $psr.simulate.sim $psr.ideal
 
     echo "$psr W=$pw R=$pyr3 a=$a fc=$fc G=$amp EFAC=$ef"
+    echo "tempo2 -gr addGaussian -f $psr.par $psr.ideal -nreal $nreal"
     tempo2 -gr addGaussian -f $psr.par $psr.ideal -nreal $nreal
 
     seed=`toasim_seed.py $psr red-$pyr3-$fc-$a`
 
     if grep -q $psr psr.noise ; then
 
-        echo tempo2 -gr addRedNoise -f $psr.par $psr.ideal -nofit -npsr 1 -seed $seed -Pyr3 $pyr3 -fc $fc -a -$a -nreal $nreal
+        echo "tempo2 -gr addRedNoise -f $psr.par $psr.ideal -nofit -npsr 1 -seed $seed -Pyr3 $pyr3 -fc $fc -a -$a -nreal $nreal $noflag "
         tempo2 -gr addRedNoise -f $psr.par $psr.ideal -nofit -npsr 1 -seed $seed -Pyr3 $pyr3 -fc $fc -a -$a -nreal $nreal $noflag 
     fi
+
+}
+
+
+gwseed=1234
+#rm $amp.gwb
+for i in *.par ; do
+
+    while [[ `jobs -r | wc -l` -ge $nthread ]] ; do
+        n=`jobs -r | wc -l`
+        echo "Wait ($n/$nthread) running"
+        sleep 1
+    done
+
+    psr=`basename $i .par`
+    echo "Process $psr"
+    dopsr $psr 2>&1 > ${psr}.simulate.log &
 done
 
-make_GWB.py -A $amp -a angles -N $nreal -p psr.list --tim .ideal
+echo "wait for threads to end"
+wait
+
+cat psr.noise | awk '{print $1,$4,$3,$5}' > psr.red
+
+make_GWB.py -A $amp -a angles -N $nreal -p psr.list --tim .ideal -n 8192
 
 echo "waiting for processes to finish"
 

@@ -11,10 +11,10 @@ cd real.$ireal
 
 
 while read line ; do
-	set -- $line
-	psr=$1
-	ln -s ../$psr.par .
-	ln -s ../$psr.ideal .
+    set -- $line
+    psr=$1
+    ln -s ../$psr.par .
+    ln -s ../$psr.ideal .
 done < ../psr.list
 
 ln -s ../*.add* .
@@ -22,22 +22,22 @@ ln -s ../*.model .
 
 echo -ne "REAL $ireal\r"
 for i in *.par ; do
-   while [[ `jobs -r | wc -l` -ge $nthread ]] ; do
-	  n=`jobs -r | wc -l`
-	  echo -ne "Wait ($n/$nthread) running" `date +%T` "    \r"
-	  sleep 0.05
-   done
+    while [[ `jobs -r | wc -l` -ge $nthread ]] ; do
+        n=`jobs -r | wc -l`
+        echo -ne "Wait ($n/$nthread) running" `date +%T` "    \r"
+        sleep 0.05
+    done
 
-   psr=`basename $i .par`
-   nobs=`wc -l $psr.ideal | awk '{print $1+1000}'`
-   echo -ne "$ireal $psr \r"
-   red=""
-   if [[ -e $psr.ideal.addRedNoise ]] ; then
-	  red="-corn $psr.ideal.addRedNoise $ireal"
-   fi
-   echo tempo2 -gr createRealisation -f $psr.ideal $red -corn $psr.ideal.addGauss $ireal -corn $psr.ideal.addGWB $ireal -npsr 1 -nobs $nobs
-   tempo2 -gr createRealisation -f $psr.ideal $red -corn $psr.ideal.addGauss $ireal -corn $psr.ideal.addGWB $ireal -npsr 1 -nobs $nobs  > /dev/null && mv $psr.ideal.real $psr.tim &
-   echo -n "-f $psr.par $psr.tim " >> many
+    psr=`basename $i .par`
+    nobs=`wc -l $psr.ideal | awk '{print $1+1000}'`
+    echo -ne "$ireal $psr \r"
+    red=""
+    if [[ -e $psr.ideal.addRedNoise ]] ; then
+        red="-corn $psr.ideal.addRedNoise $ireal"
+    fi
+    echo tempo2 -gr createRealisation -f $psr.ideal $red -corn $psr.ideal.addGauss $ireal -corn $psr.ideal.addGWB $ireal -npsr 1 -nobs $nobs
+    tempo2 -gr createRealisation -f $psr.ideal $red -corn $psr.ideal.addGauss $ireal -corn $psr.ideal.addGWB $ireal -npsr 1 -nobs $nobs  > /dev/null && mv $psr.ideal.real $psr.tim &
+    echo -n "-f $psr.par $psr.tim " >> many
 done
 
 wait

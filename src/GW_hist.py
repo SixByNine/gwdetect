@@ -65,13 +65,14 @@ for onoff in [ON,OFF]:
     if onoff==OFF:
         cols=args.offcols
     for c in cols:
-        XMAX = max(amax(stats[onoff][c]),XMAX)
-        XMIN = min(amin(stats[onoff][c]),XMIN)
+        XMAX = max(amax(stats[onoff][c-1]),XMAX)
+        XMIN = min(amin(stats[onoff][c-1]),XMIN)
 
 
 
 plt.figure(figsize=(12,8),dpi=100,facecolor='w',edgecolor='w')
 rng=(XMIN,XMAX)
+
 
 colours=['red','orange','green','blue']
 for onoff in [ON,OFF]:
@@ -139,14 +140,11 @@ for onoff in [ON,OFF]:
 
 
 try:
-    wd=os.getcwd().split("/")
-    npsr=int(wd[-1][1:])
-    yr=int(wd[-2][6:10])-2005
     for cc in args.oncols:
         c=cc-1
         print cc,c,plotstats[c]
         f=open("plotstats.%d"%cc,"w")
-        f.write("100  % 4d % 4d % 8.4f % 8.4f % 8.4f % 8.4f % 8.4f\n"%(yr,npsr,plotstats[c][0],plotstats[c][1],plotstats[c][2],plotstats[c][3],plotstats[c][4]))
+        f.write("% 8.4f % 8.4f % 8.4f % 8.4f % 8.4f\n"%(plotstats[c][0],plotstats[c][1],plotstats[c][2],plotstats[c][3],plotstats[c][4]))
         f.close()
 except Exception as e:
     print e

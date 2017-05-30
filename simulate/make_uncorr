@@ -20,4 +20,4 @@ cd uncorr
 
 rm *.addGWB
 
-make_GWB.py -A $amp -a angles -N $nreal -p psr.list --tim .ideal -U
+make_GWB.py -A $amp -a angles -N $nreal -p psr.list --tim .ideal -U -n 8192

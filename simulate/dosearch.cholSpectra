@@ -33,7 +33,7 @@ for trial in `seq $start $end` ; do
 	  exit
    fi
    cd real.$trial
-   if [[ ! -e mjk.model ]] ; then
+   if [[ ! -e psr.model ]] ; then
 	  ln -s ../*.model .
    fi
 
@@ -44,7 +44,7 @@ for trial in `seq $start $end` ; do
 
    echo -n "tempo2 -gr cholSpectra " > cmd_xspec
    cat many >> cmd_xspec
-   echo " -dcf mjk.model -xspec -yr -fit f0 -fit f1 -cache -round" >> cmd_xspec
+   echo " -dcf psr.model -qrfit -xspec -yr -fit f0 -fit f1 -cache -round" >> cmd_xspec
 
    echo -e "\r" `head -c 80 cmd_xspec`"..."
    /usr/bin/time sh cmd_xspec > cmd_xspec.log 2>&1 &
