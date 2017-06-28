@@ -1008,6 +1008,8 @@ if __name__ == "__main__":
     if args.test:
         TESTY=list()
         print "*** TEST MODE ***"
+        detector.factors[0]=0.2
+
     
     if args.write_avspec:
         onaddr=SpecAddr("on")
@@ -1065,9 +1067,7 @@ if __name__ == "__main__":
 
         ##### BEGIN TEST
         if args.test:
-            print detector.theory_var[0], detector.theory_var[10] ,"TT"
-            print detector.A2_guess/detector.theory_var[0], detector.A2_guess/detector.theory_var[10] ,"SN"
-            exit(1)
+            pass
        
         
         

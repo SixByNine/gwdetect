@@ -33,9 +33,11 @@ function dopsr {
 
     mv $psr.simulate.sim $psr.ideal
 
+    seed=`toasim_seed.py $psr white-$pyr3-$fc-$a`
+
     echo "$psr W=$pw R=$pyr3 a=$a fc=$fc G=$amp EFAC=$ef"
-    echo "tempo2 -gr addGaussian -f $psr.par $psr.ideal -nreal $nreal"
-    tempo2 -gr addGaussian -f $psr.par $psr.ideal -nreal $nreal
+    echo "tempo2 -gr addGaussian -f $psr.par $psr.ideal -nreal $nreal -seed $seed"
+    tempo2 -gr addGaussian -f $psr.par $psr.ideal -nreal $nreal -seed $seed
 
     seed=`toasim_seed.py $psr red-$pyr3-$fc-$a`
 

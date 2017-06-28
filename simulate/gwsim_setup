@@ -1,0 +1,68 @@
+#!/bin/bash
+
+
+function cleanpar {
+    par=$1
+    awk '{printf("%-10s %-20s\n", $1,$2)}' < $par | grep -vE 'RM|EPHVER|UNITS|KIN|KOM|DM[0-9]|F[3-9]|ELONG|ELAT'
+    echo "UNITS   TCB"
+    echo "EPHVER  TEMPO2"
+    echo "EPHEM   DE421"
+    echo "CLK     TT(tai)" 
+
+    grep -q RAJ $par 
+    ex=$?
+    if [[ $ex -ne 0 ]] ; then
+        psr=`grep PSRJ $par | awk '{print $2}'`
+        raj=`psrcat -c 'raj' -x $psr  | awk '{print $1}'`
+        dej=`psrcat -c 'decj' -x $psr  | awk '{print $1}'`
+        echo "RAJ $raj"
+        echo "DECJ $dej"
+    fi
+}
+
+function enablepar {
+    par=$1
+    param=$2
+    while read line ; do 
+        set -- $line
+        if [[ "$1" == "$param" ]] ; then
+            echo "$line   1"
+        else
+            echo "$line"
+        fi
+    done < $par
+}
+
+
+function makemodel {
+    psr=$1
+}
+
+while read line ; do
+    set -- $line
+    psr=$1
+
+    if [[ ! -e ${psr}.par ]] ; then
+        echo $psr
+        psrcat -E $psr > ${psr}.par
+        cleanpar ${psr}.par > ${psr}.par.clean
+        mv ${psr}.par.clean ${psr}.par
+        #for param in F0 F1 RAJ DECJ PMRA PMDEC PB PX A1 T0 OM OMDOT PBDOT EPS1 EPS2; do
+        for param in F0 F1 RAJ DECJ PMRA PMDEC ; do
+            enablepar ${psr}.par $param > ${psr}.par.enable
+            mv ${psr}.par.enable ${psr}.par
+        done
+    fi
+
+#    tempo2 -gr formIdeal -f ${psr}.par ${psr}.tim
+#    mv ${psr}.tim.sim ${psr}.simulate
+
+
+    
+
+done < psr.list
+
+
+
+
+
