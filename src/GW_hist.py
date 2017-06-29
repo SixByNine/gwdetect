@@ -4,6 +4,7 @@ from math import *
 from numpy import *
 import matplotlib.pyplot as plt
 from sys import argv,exit
+from scipy.special import erf, erfinv
 import argparse
 import matplotlib.mlab as mlab
 stat_desc=["a=0","a=0.5","a=1.0","a=itr","a"]
@@ -117,24 +118,19 @@ for onoff in [ON,OFF]:
             fout.write("%g %g\n"%(vx,vy))
         fout.close()
 
+        threshold = mean(stats[OFF][c]) + std(stats[OFF][c])*sqrt(2.0)*erfinv(2*0.997-1.0)
+
         if onoff==OFF:
-            plt.vlines(A2g+3*sigma,0,YMAX*10,linestyle=':',color=colours[c],linewidth=2)
+            plt.vlines(threshold,0,YMAX*10,linestyle=':',color=colours[c],linewidth=2)
         else:
-            sig3=sqrt(var(stats[OFF][c]))*3.0
             nn=0.0
             for i in stats[onoff][c]:
-                if i > sig3:
+                if i > threshold:
                     nn+=1.0
-            mm=0.0
-            ss=0.0
-            dx=x[1]-x[0]
-            for ix,iy in zip(x,y):
-                if ix > sig3:
-                    mm+=iy*dx
-                ss+=iy*dx
 
-            print "Detected count=%.1f%%, gauss=%.1f%% gauss100=%.1f%%"%(100*nn/N,100*mm,100*ss)
-            print "%s %d %%2 %.4f %.4f %.4f"%(onoff,c+1, nn/N,mm,ss)
+            mm = 0.5*erfc((threshold - mean(stats[onoff][c]))/(sqrt(2.0)*std(stats[onoff][c])))
+            print "Detected count=%.1f%%, gauss=%.1f%%"%(100*nn/N,100*mm)
+            print "%s %d %%2 %.4f %.4f"%(onoff,c+1, nn/N,mm)
             plotstats[c][2]=nn/N
             plotstats[c][3]=mm
 

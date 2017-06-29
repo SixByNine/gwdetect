@@ -66,6 +66,13 @@ zeta=0.5
 plt.loglog(freqs,np.power(freqs,-13.0/3.0)*A2/12.0/pi/pi,'-',color='orange')
 plt.loglog(freqs,np.power(freqs,-13.0/3.0)*zeta*A2/12.0/pi/pi,':',color='orange')
 
+plt.title("%s %s"%(argv[1],argv[2]))
+plt.xlabel("Frequency (yr^-1)")
+plt.ylabel("PSD (yr^3)")
+
+
+plt.savefig("xspec_avg.png")
+
 plt.show()
 
 

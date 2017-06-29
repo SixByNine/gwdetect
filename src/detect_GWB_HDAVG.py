@@ -79,6 +79,8 @@ while p < len(angles):
 errorbar(angles,avg,avgE,fmt='x',color='red')
 plot(180*aa/pi,azeta*A2_guess,color='red')
 plot(180*aa/pi,azeta*0,color='black')
-savefig("TEST.png")
+xlabel("Separation (degrees)")
+ylabel("Covariance (strain^2 units)")
+savefig("HDcurve.png")
 
 show()

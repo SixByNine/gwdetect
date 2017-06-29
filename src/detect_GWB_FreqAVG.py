@@ -61,6 +61,8 @@ for f,v,e in zip(freqs,avg,avgE):
 errorbar(freqs,avg,avgE,fmt='x',color='red')
 plot(freqs,freqs*0+A2_guess,color='red')
 plot(freqs,freqs*0,color='black')
-savefig("Fig.png")
+xlabel("Frequncy (yr^-1)")
+ylabel("Covariance (strain^2 units)")
+savefig("FreqCov.png")
 
 show()
